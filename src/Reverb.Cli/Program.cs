@@ -18,7 +18,11 @@ static class Program
           edit <file.cs>                     Open a notebook in the editor (a local web page).
               --port <n>                     Port to listen on (default: any free port).
               --no-browser                   Print the address instead of opening a browser.
-          run, export, convert               Not available yet.
+          run <file.cs>                      Serve a notebook as a read-only app: outputs and
+                                             widgets only, code hidden.
+              --port <n>, --no-browser       As for edit.
+              --host <address>               Listen on this address (default 127.0.0.1).
+          export, convert                    Not available yet.
 
         Options:
           --version                          Print the version.
@@ -54,8 +58,10 @@ static class Program
                 return await EditCommand.RunEditAsync(args[1..]);
             case "new":
                 return await EditCommand.RunNewAsync(args[1..]);
-            case "run" or "export" or "convert":
-                Console.Error.WriteLine($"'reverb {args[0]}' isn't available in this version yet. For now you can use 'reverb edit', 'reverb exec', 'reverb check', or 'dotnet run <file.cs>'.");
+            case "run":
+                return await EditCommand.RunAppAsync(args[1..]);
+            case "export" or "convert":
+                Console.Error.WriteLine($"'reverb {args[0]}' isn't available in this version yet. For now you can use 'reverb edit', 'reverb run', 'reverb exec', 'reverb check', or 'dotnet run <file.cs>'.");
                 return 2;
             default:
                 Console.Error.WriteLine($"Unknown command '{args[0]}'.\n");

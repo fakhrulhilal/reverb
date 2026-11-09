@@ -5,10 +5,24 @@ using Reverb.Server;
 
 namespace Reverb.Cli;
 
-/// <summary><c>reverb edit</c> and <c>reverb new</c>: start the editor server for one notebook.</summary>
+/// <summary>
+/// <c>reverb edit</c>, <c>reverb new</c> and <c>reverb run</c>: start the editor server for one
+/// notebook, either as the editor or as a read-only app.
+/// </summary>
 static class EditCommand
 {
-    sealed record Options(string Path, int Port, bool OpenBrowser, bool Edit);
+    sealed record Options(string Path, int Port, bool OpenBrowser, bool Edit, string Host = "127.0.0.1", bool App = false);
+
+    public static async Task<int> RunAppAsync(string[] args)
+    {
+        if (Parse("run", args) is not { } options) return 2;
+        if (!File.Exists(options.Path))
+        {
+            Console.Error.WriteLine($"error: '{options.Path}' doesn't exist.");
+            return 1;
+        }
+        return await ServeAsync(options with { App = true });
+    }
 
     public static async Task<int> RunNewAsync(string[] args)
     {
@@ -51,6 +65,7 @@ static class EditCommand
         var port = 0;
         var open = true;
         var edit = true;
+        var host = "127.0.0.1";
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -58,6 +73,14 @@ static class EditCommand
                 case "--port" when i + 1 < args.Length && int.TryParse(args[i + 1], out var p) && p is >= 0 and <= 65535:
                     port = p;
                     i++;
+                    break;
+                case "--host" when command == "run" && i + 1 < args.Length:
+                    host = args[++i];
+                    if (host != "localhost" && !System.Net.IPAddress.TryParse(host, out _))
+                    {
+                        Console.Error.WriteLine($"error: '{host}' isn't an IP address. Use for example --host 0.0.0.0 to listen on every network interface.");
+                        return null;
+                    }
                     break;
                 case "--no-browser":
                     open = false;
@@ -80,10 +103,10 @@ static class EditCommand
         }
         if (path is null)
         {
-            Console.Error.WriteLine($"Usage: reverb {command} <file.cs> [--port <n>] [--no-browser]{(command == "new" ? " [--no-edit]" : "")}");
+            Console.Error.WriteLine($"Usage: reverb {command} <file.cs> [--port <n>] [--no-browser]{(command == "new" ? " [--no-edit]" : "")}{(command == "run" ? " [--host <address>]" : "")}");
             return null;
         }
-        return new Options(path, port, open, edit);
+        return new Options(path, port, open, edit, host);
     }
 
     static async Task<int> ServeAsync(Options options)
@@ -100,6 +123,8 @@ static class EditCommand
                 KernelEntryAssembly = typeof(Program).Assembly.Location,
                 RuntimeVersion = Program.RuntimeVersion,
                 Port = options.Port,
+                Host = options.Host,
+                AppMode = options.App,
                 Log = Console.Error,
             });
         }
@@ -116,8 +141,15 @@ static class EditCommand
 
         await using (server)
         {
-            Console.WriteLine($"Editing {System.IO.Path.GetFileName(options.Path)}");
+            var loopback = options.Host == "localhost" || System.Net.IPAddress.IsLoopback(System.Net.IPAddress.Parse(options.Host));
+            if (!loopback)
+            {
+                Console.Error.WriteLine($"warning: listening on {options.Host}, so other machines can reach this app. Anyone with the address below (token included)");
+                Console.Error.WriteLine("         can use it, and the notebook's code runs on this machine. Only do this on a network you trust.");
+            }
+            Console.WriteLine($"{(options.App ? "Serving" : "Editing")} {System.IO.Path.GetFileName(options.Path)}{(options.App ? " as an app" : "")}");
             Console.WriteLine($"  {server.Url}");
+            if (!loopback) Console.WriteLine($"  (from other machines, use this machine's address instead of 127.0.0.1)");
             Console.WriteLine();
             Console.WriteLine("Press Ctrl+C to stop.");
             Console.Out.Flush();
