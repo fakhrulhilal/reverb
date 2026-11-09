@@ -13,6 +13,9 @@ public abstract class Widget
 
     public string Label { get; }
 
+    /// <summary>Set by a live host so user changes can find this widget. Null under <c>dotnet run</c>.</summary>
+    public string? Id { get; internal set; }
+
     /// <summary>"slider", "dropdown", "text", "checkbox", "number" or "button".</summary>
     public abstract string Kind { get; }
 
@@ -55,7 +58,22 @@ public sealed class Slider : Widget
     }
 }
 
-public sealed class Dropdown<T> : Widget
+/// <summary>Non-generic view of a dropdown, for hosts.</summary>
+public interface IDropdown
+{
+    IReadOnlyList<string> OptionTexts { get; }
+    int SelectedIndex { get; }
+}
+
+/// <summary>Non-generic view of a number box, for hosts.</summary>
+public interface INumberBox
+{
+    double? MinValue { get; }
+    double? MaxValue { get; }
+    double? StepValue { get; }
+}
+
+public sealed class Dropdown<T> : Widget, IDropdown
 {
     internal Dropdown(string label, IReadOnlyList<T> options, T value) : base(label)
     {
@@ -68,6 +86,9 @@ public sealed class Dropdown<T> : Widget
     public IReadOnlyList<T> Options { get; }
     public T Value { get; private set; }
     public override string Kind => "dropdown";
+
+    IReadOnlyList<string> IDropdown.OptionTexts => [.. Options.Select(o => TextFormatter.Format(o))];
+    int IDropdown.SelectedIndex => Options.ToList().IndexOf(Value);
     public override object? BoxedValue => Value;
 
     /// <summary>Accepts an option value or its index.</summary>
@@ -111,7 +132,7 @@ public sealed class Checkbox : Widget
     }
 }
 
-public sealed class NumberBox<T> : Widget where T : struct, INumber<T>
+public sealed class NumberBox<T> : Widget, INumberBox where T : struct, INumber<T>
 {
     internal NumberBox(string label, T value, T? min, T? max, T? step) : base(label)
     {
@@ -125,6 +146,10 @@ public sealed class NumberBox<T> : Widget where T : struct, INumber<T>
     public T? Step { get; }
     public T Value { get; private set; }
     public override string Kind => "number";
+
+    double? INumberBox.MinValue => Min is { } v ? double.CreateChecked(v) : null;
+    double? INumberBox.MaxValue => Max is { } v ? double.CreateChecked(v) : null;
+    double? INumberBox.StepValue => Step is { } v ? double.CreateChecked(v) : null;
     public override object? BoxedValue => Value;
 
     bool Fits(T v) => (Min is not { } lo || v >= lo) && (Max is not { } hi || v <= hi);

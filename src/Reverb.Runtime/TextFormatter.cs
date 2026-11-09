@@ -5,17 +5,26 @@ using System.Text;
 
 namespace Reverb;
 
+/// <summary>A sequence laid out as rows and columns of display text.</summary>
+public sealed record TableData(IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyList<string>> Rows, int Total)
+{
+    public bool Truncated => Rows.Count < Total;
+}
+
 /// <summary>
-/// Plain-text rendering used by the console host: aligned tables for sequences, indented
-/// property lists for objects.
+/// Plain-text rendering, used by the console host and as the text/plain part of every output:
+/// aligned tables for sequences, indented property lists for objects.
 /// </summary>
 public static class TextFormatter
 {
-    public const int MaxRows = 100;
+    public const int MaxRows = 1000;
+    public const int MaxTextRows = 100;
     public const int MaxColumnWidth = 40;
     const int MaxDepth = 3;
 
-    public static string Format(object? value) => Format(value, 0, new HashSet<object>(ReferenceEqualityComparer.Instance));
+    public static string Format(object? value) => Format(value, 0, NewSeen());
+
+    static HashSet<object> NewSeen() => new(ReferenceEqualityComparer.Instance);
 
     static string Format(object? value, int depth, HashSet<object> seen)
     {
@@ -31,8 +40,7 @@ public static class TextFormatter
         if (!type.IsValueType && !seen.Add(value)) return "(already shown above)";
         try
         {
-            if (value is IDictionary dict) return Table(dict.Cast<DictionaryEntry>().Select(e => (object)new { Key = e.Key, Value = e.Value }), depth, seen);
-            if (value is IEnumerable seq) return Table(seq.Cast<object?>(), depth, seen);
+            if (Table(value, MaxTextRows, depth, seen) is { } table) return RenderText(table);
             return Properties(value, depth, seen);
         }
         finally
@@ -40,6 +48,51 @@ public static class TextFormatter
             if (!type.IsValueType) seen.Remove(value);
         }
     }
+
+    /// <summary>The value as a table, or null if it isn't a sequence (strings aren't).</summary>
+    public static TableData? Table(object? value, int maxRows = MaxRows) =>
+        value is null ? null : Table(value, maxRows, 0, NewSeen());
+
+    static TableData? Table(object value, int maxRows, int depth, HashSet<object> seen)
+    {
+        IEnumerable<object?> rows;
+        if (value is IDictionary dict) rows = dict.Cast<DictionaryEntry>().Select(e => (object?)new KeyValue(e.Key, e.Value));
+        else if (value is IEnumerable seq and not string) rows = seq.Cast<object?>();
+        else return null;
+
+        var kept = new List<object?>();
+        var total = 0;
+        foreach (var r in rows)
+        {
+            if (kept.Count < maxRows) kept.Add(r);
+            total++;
+        }
+
+        var elementType = kept.FirstOrDefault(r => r is not null)?.GetType();
+        var members = elementType is null || IsScalar(elementType) || elementType == typeof(string) ? [] : Members(elementType);
+        var columns = members.Count == 0 ? ["value"] : members.Select(m => m.Name).ToList();
+        var cells = kept.Select(r => (IReadOnlyList<string>)(members.Count == 0
+            ? [Cell(r, depth, seen)]
+            : members.Select(m => Cell(r is null ? null : Read(m, r), depth, seen)).ToList())).ToList();
+        return new TableData(columns, cells, total);
+    }
+
+    sealed record KeyValue(object Key, object? Value);
+
+    public static string RenderText(TableData table)
+    {
+        if (table.Total == 0) return "(empty)";
+        var widths = table.Columns.Select((h, i) => Math.Max(h.Length, table.Rows.Max(row => Clip(row[i]).Length))).ToList();
+        var sb = new StringBuilder();
+        sb.Append(string.Join("  ", table.Columns.Select((h, i) => h.PadRight(widths[i]))).TrimEnd()).Append('\n');
+        sb.Append(string.Join("  ", widths.Select(w => new string('-', w)))).Append('\n');
+        foreach (var row in table.Rows)
+            sb.Append(string.Join("  ", row.Select((c, i) => Clip(c).PadRight(widths[i]))).TrimEnd()).Append('\n');
+        if (table.Truncated) sb.Append(CultureInfo.InvariantCulture, $"(showing {table.Rows.Count} of {table.Total} rows)\n");
+        return sb.ToString().TrimEnd('\n');
+    }
+
+    static string Clip(string text) => text.Length <= MaxColumnWidth ? text : text[..(MaxColumnWidth - 1)] + "…";
 
     static bool IsScalar(Type t) =>
         t.IsPrimitive || t.IsEnum || t == typeof(decimal) || t == typeof(DateTime) || t == typeof(DateTimeOffset)
@@ -63,41 +116,12 @@ public static class TextFormatter
         return sb.ToString().TrimEnd('\n');
     }
 
-    static string Table(IEnumerable<object?> rows, int depth, HashSet<object> seen)
-    {
-        var all = new List<object?>();
-        var total = 0;
-        foreach (var r in rows)
-        {
-            if (all.Count < MaxRows) all.Add(r);
-            total++;
-        }
-        if (total == 0) return "(empty)";
-
-        var elementType = all.FirstOrDefault(r => r is not null)?.GetType();
-        var members = elementType is null || IsScalar(elementType) || elementType == typeof(string) ? [] : Members(elementType);
-        var headers = members.Count == 0 ? ["value"] : members.Select(m => m.Name).ToList();
-        var cells = all.Select(r => members.Count == 0
-            ? [Cell(r, depth, seen)]
-            : members.Select(m => Cell(r is null ? null : Read(m, r), depth, seen)).ToList()).ToList();
-
-        var widths = headers.Select((h, i) => Math.Max(h.Length, cells.Max(row => row[i].Length))).ToList();
-        var sb = new StringBuilder();
-        sb.Append(string.Join("  ", headers.Select((h, i) => h.PadRight(widths[i]))).TrimEnd()).Append('\n');
-        sb.Append(string.Join("  ", widths.Select(w => new string('-', w)))).Append('\n');
-        foreach (var row in cells)
-            sb.Append(string.Join("  ", row.Select((c, i) => c.PadRight(widths[i]))).TrimEnd()).Append('\n');
-        if (total > all.Count) sb.Append(CultureInfo.InvariantCulture, $"(showing {all.Count} of {total} rows)\n");
-        return sb.ToString().TrimEnd('\n');
-    }
-
     static string Cell(object? value, int depth, HashSet<object> seen)
     {
         var text = value is null || IsScalar(value.GetType()) || value is string
             ? Format(value, depth + 1, seen)
             : value.ToString() ?? "";
-        text = text.Replace('\n', ' ').Replace('\r', ' ');
-        return text.Length <= MaxColumnWidth ? text : text[..(MaxColumnWidth - 1)] + "…";
+        return text.Replace('\n', ' ').Replace('\r', ' ');
     }
 
     static List<MemberInfo> Members(Type type) =>
