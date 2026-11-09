@@ -49,7 +49,28 @@ sealed class TestServer : IAsyncDisposable
         return new TestServer(server, path);
     }
 
-    public Task<TestClient> ConnectAsync() => TestClient.ConnectAsync(Server);
+    public async Task<TestClient> ConnectAsync()
+    {
+        var client = await TestClient.ConnectAsync(Server);
+        client.Context = DescribeKernel;
+        return client;
+    }
+
+    /// <summary>Whether the kernel process is working or stuck, for timeout messages.</summary>
+    string DescribeKernel()
+    {
+        if (Host.KernelProcessId is not { } pid) return "no kernel process";
+        try
+        {
+            using var p = System.Diagnostics.Process.GetProcessById(pid);
+            var cpu = p.HasExited ? "exited" : $"{p.TotalProcessorTime.TotalSeconds:F1} s CPU, {p.Threads.Count} threads, started {(DateTime.Now - p.StartTime).TotalSeconds:F0} s ago";
+            return $"kernel {pid}: {cpu}; stderr: {Host.KernelStandardError.Trim()}";
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return $"kernel {pid}: gone ({e.Message})";
+        }
+    }
 
     public string FileText() => File.ReadAllText(NotebookPath);
 
@@ -215,6 +236,9 @@ sealed class TestClient : IAsyncDisposable
 
     public bool Has(string type) => Messages.Any(m => m.Type == type);
 
+    /// <summary>Extra detail for timeout messages, such as the kernel process's state.</summary>
+    public Func<string>? Context { get; set; }
+
     public async Task SendAsync(ClientMessage m)
     {
         m.Seq = Interlocked.Increment(ref seq);
@@ -245,7 +269,7 @@ sealed class TestClient : IAsyncDisposable
         {
             var cells = string.Join(" | ", Cells.Select(c => $"{c.Id}={c.Status} runs={c.Runs} '{string.Concat(c.Outputs.Select(o => o.Text ?? o.Data?[Output.PlainText])).ReplaceLineEndings(" ")}'"));
             var kernel = string.Join(" / ", Messages.Where(m => m.Type is BrowserMessages.KernelStatus or BrowserMessages.Error).Select(m => $"{m.State ?? "error"}: {m.Message}"));
-            return $"{cells}. Kernel now {KernelState}; kernel and error messages: {kernel}";
+            return $"{cells}. Kernel now {KernelState}; kernel and error messages: {kernel}. {Context?.Invoke()}";
         }
     }
 

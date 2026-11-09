@@ -117,6 +117,9 @@ public sealed class NotebookHost : IAsyncDisposable
     /// <summary>The kernel's process id, for tests that kill it.</summary>
     public int? KernelProcessId => kernel?.ProcessId;
 
+    /// <summary>What the kernel process has written to stderr, for diagnosing failures.</summary>
+    public string KernelStandardError => kernel?.StandardError ?? "";
+
     public static async Task<NotebookHost> OpenAsync(EditorOptions options)
     {
         var path = System.IO.Path.GetFullPath(options.NotebookPath);
