@@ -45,6 +45,8 @@ public sealed class ClientMessage
     public string? CellId { get; set; }
     public string? Source { get; set; }
     public string? AfterCellId { get; set; }
+
+    /// <summary>For cell.create, "code" or "markdown"; for widget.setValue, the widget's kind.</summary>
     public string? Kind { get; set; }
     public CellAttrs? Attrs { get; set; }
     public bool? Lazy { get; set; }
@@ -60,6 +62,9 @@ public sealed class ServerMessage
     public long? Ack { get; set; }
 
     // notebook.snapshot
+    /// <summary>"edit", or "app" for a read-only app (<c>reverb run</c>).</summary>
+    public string? Mode { get; set; }
+
     public string? Path { get; set; }
     public string? Name { get; set; }
     public bool? Lazy { get; set; }
@@ -71,6 +76,7 @@ public sealed class ServerMessage
     // cell messages
     public string? CellId { get; set; }
     public string? Status { get; set; }
+    public int? Runs { get; set; }
     public long? ElapsedMs { get; set; }
     public string? Message { get; set; }
     public List<OutputData>? Outputs { get; set; }
@@ -113,6 +119,9 @@ public sealed class CellView
 
     /// <summary>The source differs from what the kernel last ran.</summary>
     public bool Edited { get; set; }
+
+    /// <summary>How many times the cell has started running since the editor opened.</summary>
+    public int Runs { get; set; }
 }
 
 public sealed class PackageView

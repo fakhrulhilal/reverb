@@ -35,7 +35,7 @@ sealed class TestServer : IAsyncDisposable
         return dir;
     }
 
-    public static async Task<TestServer> StartAsync(string text, string name = "notebook.cs")
+    public static async Task<TestServer> StartAsync(string text, string name = "notebook.cs", bool appMode = false)
     {
         var path = Path.Combine(TempFolder(), name);
         await File.WriteAllTextAsync(path, text);
@@ -44,6 +44,7 @@ sealed class TestServer : IAsyncDisposable
             NotebookPath = path,
             KernelEntryAssembly = CliAssembly,
             AutosaveDelay = TimeSpan.FromMilliseconds(200),
+            AppMode = appMode,
         });
         return new TestServer(server, path);
     }
@@ -69,6 +70,7 @@ sealed class TestClient : IAsyncDisposable
         public string Status = "";
         public string? Message;
         public bool Edited;
+        public int Runs;
         public List<OutputData> Outputs = [];
         public List<DiagnosticData> Diagnostics = [];
     }
@@ -89,6 +91,7 @@ sealed class TestClient : IAsyncDisposable
     public List<EdgeData> Edges { get; private set; } = [];
     public string KernelState { get; private set; } = "";
     public bool Lazy { get; private set; }
+    public string Mode { get; private set; } = "";
     public int Snapshots { get; private set; }
 
     public static async Task<TestClient> ConnectAsync(EditorServer server, string? token = null, string? origin = null)
@@ -131,12 +134,14 @@ sealed class TestClient : IAsyncDisposable
             case BrowserMessages.Snapshot:
                 Snapshots++;
                 Lazy = m.Lazy ?? false;
+                Mode = m.Mode ?? "";
                 KernelState = m.Kernel!.State;
                 Edges = m.Edges ?? [];
-                Cells = [.. m.Cells!.Select(c => new Cell { Id = c.Id, Kind = c.Kind, Source = c.Source, Status = c.Status, Message = c.Message, Edited = c.Edited, Outputs = c.Outputs, Diagnostics = c.Diagnostics })];
+                Cells = [.. m.Cells!.Select(c => new Cell { Id = c.Id, Kind = c.Kind, Source = c.Source, Status = c.Status, Message = c.Message, Edited = c.Edited, Runs = c.Runs, Outputs = c.Outputs, Diagnostics = c.Diagnostics })];
                 break;
             case BrowserMessages.CellStatus when Find(m.CellId) is { } c:
                 c.Status = m.Status!;
+                c.Runs = m.Runs ?? c.Runs;
                 c.Message = m.Message;
                 break;
             case BrowserMessages.CellOutputs when Find(m.CellId) is { } c:
@@ -184,6 +189,24 @@ sealed class TestClient : IAsyncDisposable
         lock (gate)
             return Find(id) is { } c ? string.Concat(c.Outputs.Select(o => o.Text ?? o.Data?[Output.PlainText] ?? "")).ReplaceLineEndings("\n") : "";
     }
+
+    public int Runs(string id)
+    {
+        lock (gate) return Find(id)?.Runs ?? 0;
+    }
+
+    /// <summary>The widget a cell shows, as the kernel describes it.</summary>
+    public JsonElement? Widget(string id)
+    {
+        lock (gate)
+        {
+            var json = Find(id)?.Outputs.Select(o => o.Data?.GetValueOrDefault(Output.Widget)).FirstOrDefault(j => j is not null);
+            return json is null ? null : JsonDocument.Parse(json).RootElement.Clone();
+        }
+    }
+
+    public Task SetWidget(string widgetId, object value, string kind) =>
+        SendAsync(new ClientMessage { Type = BrowserMessages.WidgetSetValue, WidgetId = widgetId, Kind = kind, Value = JsonSerializer.SerializeToElement(value, value.GetType(), WidgetJson.Default) });
 
     public IReadOnlyList<string> CellIds()
     {
@@ -235,3 +258,9 @@ sealed class TestClient : IAsyncDisposable
         socket.Dispose();
     }
 }
+
+[System.Text.Json.Serialization.JsonSerializable(typeof(int))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(double))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(bool))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(string))]
+partial class WidgetJson : System.Text.Json.Serialization.JsonSerializerContext;

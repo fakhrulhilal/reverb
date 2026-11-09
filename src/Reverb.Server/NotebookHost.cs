@@ -25,6 +25,12 @@ public sealed record EditorOptions
 
     public TimeSpan AutosaveDelay { get; init; } = TimeSpan.FromSeconds(1);
 
+    /// <summary>
+    /// Serve the notebook as an app (<c>reverb run</c>): outputs and widgets only. Code isn't sent
+    /// to the browser, nothing can be edited, the file is never written, and lazy mode is off.
+    /// </summary>
+    public bool AppMode { get; init; }
+
     public TextWriter Log { get; init; } = TextWriter.Null;
 }
 
@@ -55,6 +61,9 @@ public sealed class NotebookHost : IAsyncDisposable
         public long? ElapsedMs;
         public string? Message;
         public List<OutputData> Outputs = [];
+
+        /// <summary>How many times the cell has started running in this session.</summary>
+        public int Runs;
     }
 
     readonly EditorOptions options;
@@ -81,6 +90,11 @@ public sealed class NotebookHost : IAsyncDisposable
     string? kernelMessage;
     bool kernelLazy;
     bool disposed;
+    readonly List<DateTime> crashes = [];
+
+    // A widget change that's still running, and the newest value that arrived meanwhile.
+    readonly HashSet<string> widgetsInFlight = new(StringComparer.Ordinal);
+    readonly Dictionary<string, JsonElement?> widgetsWaiting = new(StringComparer.Ordinal);
 
     NotebookHost(EditorOptions options, NotebookDocument doc, string? diskText)
     {
@@ -197,6 +211,11 @@ public sealed class NotebookHost : IAsyncDisposable
     async Task HandleAsync(ClientSession client, ClientMessage m)
     {
         client.LastSeq = Math.Max(client.LastSeq, m.Seq);
+        if (options.AppMode && m.Type != BrowserMessages.WidgetSetValue)
+        {
+            client.Send(Error("This notebook is running as an app, so it can't be changed here. Open it with 'reverb edit' to edit it."));
+            return;
+        }
         switch (m.Type)
         {
             case BrowserMessages.CellUpdate:
@@ -281,7 +300,7 @@ public sealed class NotebookHost : IAsyncDisposable
 
             case BrowserMessages.WidgetSetValue:
                 if (m.WidgetId is null) return;
-                SendWork(new KernelRequest { Type = RequestTypes.SetWidget, WidgetId = m.WidgetId, Value = m.Value });
+                SetWidget(m.WidgetId, m.Value, everyChangeCounts: m.Kind == "button");
                 break;
 
             case BrowserMessages.KernelInterrupt:
@@ -388,21 +407,43 @@ public sealed class NotebookHost : IAsyncDisposable
 
     void Analyze()
     {
-        if (kernel is null || kernelState == "dead") return;
+        if (kernel is null || kernelState == "dead" || options.AppMode) return;
         var request = new KernelRequest { Type = RequestTypes.Analyze, Text = doc.Serialize(), Version = version };
         _ = Swallow(kernel.SendAsync(request));
     }
 
+    bool LazyInFile => !options.AppMode && (doc.Preamble.Header?.Lazy ?? false);
+
     void SyncLazy()
     {
-        var lazy = doc.Preamble.Header?.Lazy ?? false;
+        var lazy = LazyInFile;
         if (lazy == kernelLazy) return;
         kernelLazy = lazy;
         SendWork(new KernelRequest { Type = RequestTypes.SetLazy, Lazy = lazy });
     }
 
+    /// <summary>
+    /// Sends a widget change. While one change to a widget is running, later ones wait and only
+    /// the newest is sent, so dragging a slider doesn't queue up a run for every pixel. Button
+    /// clicks all count, so they're sent as they come.
+    /// </summary>
+    void SetWidget(string id, JsonElement? value, bool everyChangeCounts)
+    {
+        if (!everyChangeCounts && widgetsInFlight.Contains(id))
+        {
+            widgetsWaiting[id] = value;
+            return;
+        }
+        widgetsInFlight.Add(id);
+        SendWork(new KernelRequest { Type = RequestTypes.SetWidget, WidgetId = id, Value = value }, () =>
+        {
+            widgetsInFlight.Remove(id);
+            if (widgetsWaiting.Remove(id, out var next)) SetWidget(id, next, everyChangeCounts: false);
+        });
+    }
+
     /// <summary>Sends a request that runs code. The kernel shows as busy until it's done.</summary>
-    void SendWork(KernelRequest request)
+    void SendWork(KernelRequest request, Action? done = null)
     {
         if (kernel is null || kernelState == "dead") return;
         var generation = kernelGeneration;
@@ -414,6 +455,7 @@ public sealed class NotebookHost : IAsyncDisposable
             if (generation != kernelGeneration) return;
             outstanding = Math.Max(0, outstanding - 1);
             if (outstanding == 0 && kernelState == "busy") SetKernelState("ready", null);
+            done?.Invoke();
         }), TaskScheduler.Default);
     }
 
@@ -471,7 +513,7 @@ public sealed class NotebookHost : IAsyncDisposable
         }
 
         SetKernelState("ready", kernelMessage);
-        kernelLazy = doc.Preamble.Header?.Lazy ?? false;
+        kernelLazy = LazyInFile;
         SubmitAll();
         SendWork(new KernelRequest { Type = RequestTypes.Open, Text = KernelDocument().Serialize(), Lazy = kernelLazy, Run = run });
         Analyze();
@@ -482,6 +524,8 @@ public sealed class NotebookHost : IAsyncDisposable
         var old = kernel;
         kernel = null;
         kernelGeneration++;
+        widgetsInFlight.Clear();
+        widgetsWaiting.Clear();
         if (old is not null)
         {
             old.Kill();
@@ -489,8 +533,9 @@ public sealed class NotebookHost : IAsyncDisposable
         }
         MarkAllStale();
         kernelMessage = message;
-        // Nothing runs until asked: if a cell stopped the kernel, running it again would just do it again.
-        await StartKernelAsync(run: false);
+        // In the editor nothing runs until asked: if a cell stopped the kernel, running it again
+        // would just do it again. An app's viewers can't run cells, so an app runs everything.
+        await StartKernelAsync(run: options.AppMode);
         BroadcastSnapshot();
     }
 
@@ -499,6 +544,15 @@ public sealed class NotebookHost : IAsyncDisposable
         if (generation != kernelGeneration || disposed) return;
         var stderr = kernel?.StandardError.Trim() ?? "";
         options.Log.WriteLine($"reverb: the kernel stopped (exit code {exitCode}).{(stderr.Length > 0 ? "\n" + stderr : "")}");
+        crashes.RemoveAll(t => DateTime.UtcNow - t > TimeSpan.FromMinutes(1));
+        crashes.Add(DateTime.UtcNow);
+        if (crashes.Count >= 3)
+        {
+            // Something keeps killing it (a cell calling Environment.Exit, say). Stop trying.
+            MarkAllStale();
+            SetKernelState("dead", $"The kernel stopped (exit code {exitCode}) three times in a minute, so Reverb stopped restarting it.{(options.AppMode ? "" : " Fix the cell that stops it, then press Restart.")}");
+            return;
+        }
         SetKernelState("dead", $"The kernel stopped (exit code {exitCode}). Starting a new one; run cells again to get their values back.");
         Post(() => RestartKernelAsync($"The kernel stopped (exit code {exitCode}) and was restarted. Run cells to get their values back."));
     }
@@ -536,10 +590,11 @@ public sealed class NotebookHost : IAsyncDisposable
                     r.Outputs = [];
                     Broadcast(new ServerMessage { Type = BrowserMessages.CellOutputs, CellId = e.Cell, Outputs = [] });
                 }
+                if (e.Status == "running") r.Runs++;
                 r.Status = e.Status ?? "idle";
                 r.ElapsedMs = e.ElapsedMs;
                 r.Message = e.Message;
-                Broadcast(new ServerMessage { Type = BrowserMessages.CellStatus, CellId = e.Cell, Status = r.Status, ElapsedMs = e.ElapsedMs, Message = e.Message });
+                Broadcast(new ServerMessage { Type = BrowserMessages.CellStatus, CellId = e.Cell, Status = r.Status, ElapsedMs = e.ElapsedMs, Message = e.Message, Runs = r.Runs });
                 break;
             }
             case EventTypes.Cleared when e.Cell is not null:
@@ -600,12 +655,13 @@ public sealed class NotebookHost : IAsyncDisposable
         Ack = client.LastSeq,
         Path = Path,
         Name = System.IO.Path.GetFileName(Path),
-        Lazy = doc.Preamble.Header?.Lazy ?? false,
+        Mode = options.AppMode ? "app" : "edit",
+        Lazy = LazyInFile,
         Kernel = new KernelView { State = kernelState, Message = kernelMessage },
         Packages = [.. doc.Preamble.Directives.Where(d => d.Kind == "package").Select(d => new PackageView { Name = d.Name, Version = d.Value })],
-        NotebookDiagnostics = DiagnosticsOf(null),
-        Edges = graph,
-        Cells = [.. doc.Cells.Where(c => c.Key is not null).Select(CellViewOf)],
+        NotebookDiagnostics = options.AppMode ? [] : DiagnosticsOf(null),
+        Edges = options.AppMode ? [] : graph,
+        Cells = [.. doc.Cells.Where(c => c.Key is not null && (!options.AppMode || c.Kind is CellKind.Code or CellKind.Markdown)).Select(CellViewOf)],
     };
 
     CellView CellViewOf(NotebookCell cell)
@@ -616,13 +672,15 @@ public sealed class NotebookHost : IAsyncDisposable
         {
             Id = key,
             Kind = cell.Kind.ToString().ToLowerInvariant(),
-            Source = cell.Source,
+            // An app's viewers see outputs, not code.
+            Source = options.AppMode && cell.Kind != CellKind.Markdown ? "" : cell.Source,
             Attrs = new CellAttrs { HideCode = cell.HideCode, Disabled = cell.Disabled, Name = cell.Name },
             Status = r?.Status ?? "idle",
             ElapsedMs = r?.ElapsedMs,
             Message = r?.Message,
             Outputs = r?.Outputs ?? [],
-            Diagnostics = DiagnosticsOf(key),
+            Diagnostics = options.AppMode ? [] : DiagnosticsOf(key),
+            Runs = r?.Runs ?? 0,
             Edited = IsEdited(cell),
         };
     }
@@ -632,6 +690,7 @@ public sealed class NotebookHost : IAsyncDisposable
     void SaveNow()
     {
         saveTimer.Change(Timeout.Infinite, Timeout.Infinite);
+        if (options.AppMode) return;
         var text = doc.Serialize();
         try
         {
