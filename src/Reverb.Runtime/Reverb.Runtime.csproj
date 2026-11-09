@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Referenced by every notebook. Keep it small and free of dependencies. -->
+  <PropertyGroup>
+    <RootNamespace>Reverb</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <PackageId>Reverb.Runtime</PackageId>
+    <Version>0.1.0</Version>
+    <Description>Display helpers and UI widgets for Reverb notebooks.</Description>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+</Project>

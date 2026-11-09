@@ -1,0 +1,65 @@
+namespace Reverb;
+
+/// <summary>
+/// Where notebook output goes. The Reverb kernel sets <see cref="Current"/> before it runs cells.
+/// When nothing is set (plain <c>dotnet run</c>), output is written to the console as text.
+/// </summary>
+public abstract class ReverbHost
+{
+    static ReverbHost? current;
+
+    public static ReverbHost? Current
+    {
+        get => current;
+        set => current = value;
+    }
+
+    internal static ReverbHost Effective => current ?? ConsoleHost.Instance;
+
+    public abstract void Display(object? value, string? title);
+
+    public abstract void Markdown(string markdown);
+
+    public abstract void Html(string html);
+
+    /// <summary>Called when a widget is created. A live host can restore the value the user picked.</summary>
+    public virtual void WidgetCreated(Widget widget)
+    {
+    }
+}
+
+/// <summary>Writes output as plain text. Used when a notebook runs with <c>dotnet run</c>.</summary>
+public sealed class ConsoleHost : ReverbHost
+{
+    public static readonly ConsoleHost Instance = new();
+
+    public override void Display(object? value, string? title)
+    {
+        if (title is not null) Console.WriteLine($"== {title} ==");
+        Console.WriteLine(TextFormatter.Format(value));
+    }
+
+    public override void Markdown(string markdown) => Console.WriteLine(markdown);
+
+    public override void Html(string html) => Console.WriteLine(html);
+}
+
+public static class DumpExtensions
+{
+    /// <summary>Displays the value and returns it, so it can sit at the end of a chain.</summary>
+    public static T Dump<T>(this T value, string? title = null)
+    {
+        ReverbHost.Effective.Display(value, title);
+        return value;
+    }
+}
+
+/// <summary>Output helpers. Add <c>using static Reverb.Notebook;</c> to call them as <c>Md(...)</c>.</summary>
+public static class Notebook
+{
+    public static void Display(object? value) => ReverbHost.Effective.Display(value, null);
+
+    public static void Md(string markdown) => ReverbHost.Effective.Markdown(markdown);
+
+    public static void Html(string html) => ReverbHost.Effective.Html(html);
+}
