@@ -139,6 +139,9 @@ sealed class KernelHost : ReverbHost
             if (installed) return;
             Console.SetOut(new RoutingWriter(StreamItem.Stdout, Console.Out));
             Console.SetError(new RoutingWriter(StreamItem.Stderr, Console.Error));
+            // The process's stdin carries requests from the client; a cell reading the console
+            // must not eat them. It sees an empty input instead.
+            Console.SetIn(TextReader.Null);
             Current = Instance;
             installed = true;
         }

@@ -194,4 +194,20 @@ public class KernelProcessTests(ITestOutputHelper output)
         var clients = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => KernelClient.StartAsync(new KernelLaunch { EntryAssembly = Cli.CliAssembly, NotebookPath = notebook })));
         foreach (var c in clients) await c.DisposeAsync();
     }
+
+    [Fact]
+    public async Task A_cell_reading_the_console_does_not_eat_requests()
+    {
+        var text = NotebookText.Build(["var line = Console.ReadLine();\nConsole.WriteLine(line is null);", "var n = 1;"]);
+        var (client, rec) = await StartAsync(text);
+        await using var _ = client;
+        await client.SendAsync(Open(text)).WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.Equal("True\n", rec.Stdout("c1"));
+
+        // The kernel still hears the next request.
+        var edited = NotebookText.Build(["var line = Console.ReadLine();\nConsole.WriteLine(line is null);", "var n = 2;\nConsole.WriteLine(n);"]);
+        var done = await client.SendAsync(new KernelRequest { Type = RequestTypes.Update, Text = edited }).WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.True(done.Ok);
+        Assert.Equal("2\n", rec.Stdout("c2"));
+    }
 }
