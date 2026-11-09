@@ -94,6 +94,7 @@ function CellComponent(props: Props) {
       data-cell-id={cell.id}
       data-kind={cell.kind}
       data-status={cell.status}
+      data-runs={cell.runs}
       aria-label={`Cell ${title}`}
       tabIndex={-1}
       onMouseDown={() => props.onSelect(cell.id, "command")}

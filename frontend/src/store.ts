@@ -1,4 +1,4 @@
-import type { CellAttrs, CellView, ClientMessage, Diagnostic, Edge, KernelState, Output, ServerMessage } from "./protocol";
+import type { CellAttrs, CellView, ClientMessage, Diagnostic, Edge, KernelState, Output, ServerMessage, WidgetKind } from "./protocol";
 
 export interface Cell extends CellView {
   /** When the cell started running, for the elapsed-time badge (local clock). */
@@ -14,6 +14,7 @@ export interface Toast {
 export interface NotebookState {
   connection: "connecting" | "open" | "closed";
   loaded: boolean;
+  mode: "edit" | "app";
   name: string;
   path: string;
   lazy: boolean;
@@ -46,6 +47,7 @@ export class NotebookStore {
   state: NotebookState = {
     connection: "connecting",
     loaded: false,
+    mode: "edit",
     name: "",
     path: "",
     lazy: false,
@@ -137,6 +139,7 @@ export class NotebookStore {
           status: m.status,
           elapsedMs: m.elapsedMs,
           message: m.message,
+          runs: m.runs ?? c.runs,
           runningSince: m.status === "running" ? Date.now() : undefined,
         }));
         break;
@@ -195,6 +198,7 @@ export class NotebookStore {
     for (const [id, p] of this.pending) if (p.seq !== 0 && p.seq > m.ack) this.flushCell(id);
     this.set({
       loaded: true,
+      mode: m.mode,
       name: m.name,
       path: m.path,
       lazy: m.lazy,
@@ -283,7 +287,7 @@ export class NotebookStore {
     const id = newCellId(new Set(this.state.cells.map((c) => c.id)));
     this.structuralSeq = this.send({ type: "cell.create", cellId: id, afterCellId, kind });
     // Show it now; the snapshot that follows confirms where it went.
-    const cell: Cell = { id, kind, source: "", attrs: {}, status: "idle", outputs: [], diagnostics: [], edited: false };
+    const cell: Cell = { id, kind, source: "", attrs: {}, status: "idle", outputs: [], diagnostics: [], edited: false, runs: 0 };
     const cells = [...this.state.cells];
     const at = afterCellId === null ? firstSlot(cells) : cells.findIndex((c) => c.id === afterCellId) + 1;
     cells.splice(Math.min(Math.max(at, firstSlot(cells)), lastSlot(cells)), 0, cell);
@@ -323,9 +327,9 @@ export class NotebookStore {
     this.updateCell(cellId, (c) => ({ ...c, attrs: { ...c.attrs, ...attrs } }));
   }
 
-  setWidget(widgetId: string, value: unknown) {
-    this.send({ type: "widget.setValue", widgetId, value });
-  }
+  setWidget = (widgetId: string, value: unknown, kind: WidgetKind) => {
+    this.send({ type: "widget.setValue", widgetId, value, kind });
+  };
 
   requestFocus(cellId: string, at: "start" | "end" = "end") {
     this.focus = { cellId, at, serial: (this.focus?.serial ?? 0) + 1 };

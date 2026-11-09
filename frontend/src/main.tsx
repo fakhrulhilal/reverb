@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { App } from "./App";
+import { Root } from "./Root";
 import { NotebookStore } from "./store";
 import "./styles.css";
 
@@ -27,4 +27,4 @@ const scheme = window.location.protocol === "https:" ? "wss" : "ws";
 const store = new NotebookStore(`${scheme}://${window.location.host}/ws?token=${encodeURIComponent(token)}`);
 store.connect();
 
-createRoot(document.getElementById("root")!).render(<App store={store} />);
+createRoot(document.getElementById("root")!).render(<Root store={store} />);

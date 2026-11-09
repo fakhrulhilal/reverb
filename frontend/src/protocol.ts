@@ -50,11 +50,14 @@ export interface CellView {
   outputs: Output[];
   diagnostics: Diagnostic[];
   edited: boolean;
+  /** How many times the cell has started running since the editor opened. */
+  runs: number;
 }
 
 export type ServerMessage =
   | {
       type: "notebook.snapshot";
+      mode: "edit" | "app";
       notebookVersion: number;
       ack: number;
       path: string;
@@ -66,7 +69,7 @@ export type ServerMessage =
       notebookDiagnostics: Diagnostic[];
       edges: Edge[];
     }
-  | { type: "cell.status"; cellId: string; status: CellStatus; elapsedMs?: number; message?: string }
+  | { type: "cell.status"; cellId: string; status: CellStatus; elapsedMs?: number; message?: string; runs?: number }
   | { type: "cell.outputs"; cellId: string; outputs: Output[] }
   | { type: "cell.stream"; cellId: string; stream: "stdout" | "stderr"; text: string }
   | { type: "cell.diagnostics"; cellId?: string; notebookVersion: number; diagnostics: Diagnostic[] }
@@ -86,7 +89,7 @@ export type ClientMessage =
   | { type: "cell.delete"; cellId: string }
   | { type: "cell.move"; cellId: string; afterCellId: string | null }
   | { type: "cell.setAttrs"; cellId: string; attrs: CellAttrs }
-  | { type: "widget.setValue"; widgetId: string; value: unknown }
+  | { type: "widget.setValue"; widgetId: string; value: unknown; kind: WidgetKind }
   | { type: "kernel.interrupt" }
   | { type: "kernel.restart" };
 
@@ -103,3 +106,20 @@ export const MIME = {
   error: "application/vnd.reverb.error+json",
   vegaLite: "application/vnd.vegalite.v5+json",
 } as const;
+
+export type WidgetKind = "slider" | "dropdown" | "text" | "checkbox" | "number" | "button";
+
+/** A widget as the kernel describes it (application/vnd.reverb.widget+json). */
+export interface WidgetSpec {
+  kind: WidgetKind;
+  label: string;
+  /** Missing when the widget isn't live (it can't be changed). */
+  id?: string;
+  value: number | string | boolean | null;
+  min?: number;
+  max?: number;
+  step?: number;
+  /** Dropdowns: option texts and the selected index. */
+  options?: string[];
+  index?: number;
+}

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { MIME, type Output } from "./protocol";
+import { MIME, type Output, type WidgetSpec } from "./protocol";
+import { WidgetView } from "./Widgets";
 import { renderMarkdown } from "./markdown";
 
 interface TableData {
@@ -28,10 +29,16 @@ export function Outputs({ outputs }: { outputs: Output[] }) {
   return (
     <div className="outputs" data-testid="outputs">
       {outputs.map((o, i) => (
-        <OutputView key={i} output={o} />
+        <OutputView key={widgetKey(o) ?? i} output={o} />
       ))}
     </div>
   );
+}
+
+function widgetKey(o: Output): string | undefined {
+  const json = o.data?.[MIME.widget];
+  if (!json) return undefined;
+  return parse<WidgetSpec>(json)?.id;
 }
 
 function OutputView({ output }: { output: Output }) {
@@ -48,6 +55,10 @@ function OutputView({ output }: { output: Output }) {
 }
 
 function Rich({ data }: { data: Record<string, string> }) {
+  if (data[MIME.widget]) {
+    const w = parse<WidgetSpec>(data[MIME.widget]);
+    if (w) return <WidgetView spec={w} />;
+  }
   if (data[MIME.error]) {
     const e = parse<ErrorData>(data[MIME.error]);
     if (e) return <ErrorView error={e} />;
