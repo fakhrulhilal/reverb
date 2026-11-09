@@ -40,6 +40,20 @@ public sealed class DependencyGraph
         return Sorted(Reach(byTo[key].Select(e => e.From)));
     }
 
+    /// <summary>Every cell <paramref name="key"/> transitively depends on, in file order, not including it.</summary>
+    public ImmutableArray<string> Upstream(string key)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var queue = new Queue<string>(byFrom[key].Select(e => e.To));
+        while (queue.Count > 0)
+        {
+            var k = queue.Dequeue();
+            if (!seen.Add(k)) continue;
+            foreach (var e in byFrom[k]) queue.Enqueue(e.To);
+        }
+        return Sorted(seen);
+    }
+
     /// <summary>
     /// The cells to re-run when the variable <paramref name="name"/> (declared in
     /// <paramref name="declaringCell"/>) changes without its cell re-running, e.g. a widget value:

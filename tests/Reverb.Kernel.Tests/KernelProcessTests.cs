@@ -160,4 +160,29 @@ public class KernelProcessTests(ITestOutputHelper output)
         Assert.EndsWith("70\n", rec.Stdout("c2"));
         Assert.Contains(rec.Events, e => e.Type == EventTypes.Outputs && e.Cell == "c1" && e.Outputs![0].Data![Output.PlainText] == "[slider n = 7]");
     }
+
+    [Fact]
+    public async Task Analyze_answers_while_a_cell_runs()
+    {
+        var text = NotebookText.Build(["var a = 1;\nawait Task.Delay(-1, Notebook.CancellationToken);", "var b = a + 1;"]);
+        var (client, rec) = await StartAsync(text);
+        await using var _ = client;
+        var open = client.SendAsync(Open(text));
+        await WaitFor(() => rec.StatusOf("c1") == "running");
+
+        var edited = NotebookText.Build(["var a = 1;\nawait Task.Delay(-1, Notebook.CancellationToken);", "var b = a + missing;", "var c = b;"]);
+        var done = await client.SendAsync(new KernelRequest { Type = RequestTypes.Analyze, Text = edited, Version = 7 }).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(done.Ok);
+        var analysis = Assert.Single(rec.Events, e => e.Type == EventTypes.Analysis);
+        Assert.Equal(7, analysis.Version);
+        Assert.Contains(analysis.Diagnostics!, d => d.Id == "CS0103" && d.Cell == "c2");
+        Assert.Contains(analysis.Graph!, e => e.From == "c2" && e.To == "c1" && e.Via.SequenceEqual(["a"]));
+        Assert.Contains(analysis.Graph!, e => e.From == "c3" && e.To == "c2");
+
+        // Analysing didn't touch the running cell.
+        Assert.Equal("running", rec.StatusOf("c1"));
+        Assert.False(open.IsCompleted);
+        client.Interrupt();
+        await open.WaitAsync(TimeSpan.FromSeconds(5));
+    }
 }

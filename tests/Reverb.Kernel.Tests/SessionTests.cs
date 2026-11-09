@@ -162,6 +162,86 @@ public class SessionTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task Running_a_cell_runs_its_stale_ancestors_first()
+    {
+        string[] cells = ["var a = 1;", "var b = a + 1;", "var c = b + 1;", "var other = 5;", "var d = a + other;"];
+        await using var s = new KernelSession();
+        await s.OpenAsync(Doc(cells), run: false);
+        await s.RunCellAsync("c3");
+        Dump(s);
+        // c5 runs because its input a changes, and so its other stale input c4 runs too.
+        Assert.Equal(["c1", "c2", "c3", "c4", "c5"], s.Stats.RunLog);
+        Assert.Equal(3, s.Store.Get<int>("c"));
+        Assert.Equal(6, s.Store.Get<int>("d"));
+    }
+
+    [Fact]
+    public async Task An_edit_after_opening_without_running_runs_what_it_needs()
+    {
+        string[] cells = ["var a = 1;", "var b = 2;", "var c = a + b;"];
+        await using var s = new KernelSession();
+        await s.OpenAsync(Doc(cells), run: false);
+        cells[0] = "var a = 10;";
+        await s.UpdateAsync(Doc(cells));
+        Assert.Equal(["c1", "c2", "c3"], s.Stats.RunLog);
+        Assert.Equal(12, s.Store.Get<int>("c"));
+    }
+
+    [Fact]
+    public async Task Lazy_run_of_a_cell_runs_stale_ancestors_and_the_cells_between()
+    {
+        string[] cells = ["var a = 1;", "var b = a + 1;", "var c = b + 1;", "var d = a * 100;"];
+        await using var s = await Open(cells, lazy: true);
+        await s.RunCellAsync("c3");
+        Assert.Equal(["c1", "c2", "c3"], s.Stats.RunLog);
+        Assert.Equal(3, s.Store.Get<int>("c"));
+        Assert.Equal(CellStatus.Stale, s.StatusOf("c4"));
+
+        s.Stats.Reset();
+        cells[0] = "var a = 10;";
+        await s.UpdateAsync(Doc(cells));
+        await s.RunCellAsync("c2");
+        Assert.Equal(["c1", "c2"], s.Stats.RunLog);
+        Assert.Equal(11, s.Store.Get<int>("b"));
+        Assert.Equal(CellStatus.Stale, s.StatusOf("c3"));
+        Assert.Equal(CellStatus.Stale, s.StatusOf("c4"));
+    }
+
+    [Fact]
+    public async Task Update_and_run_in_one_request_runs_each_cell_once()
+    {
+        string[] cells = ["var a = 1;", "var b = a + 1;", "var r = Random.Shared.Next();"];
+        await using var s = await Open(cells);
+        s.Stats.Reset();
+        cells[0] = "var a = 2;";
+        await s.UpdateAsync(Doc(cells), runCell: "c1");
+        Assert.Equal(["c1", "c2"], s.Stats.RunLog);
+
+        s.Stats.Reset();
+        cells[0] = "var a = 3;";
+        await s.UpdateAsync(Doc(cells), runAll: true);
+        Assert.Equal(["c1", "c2", "c3"], s.Stats.RunLog);
+
+        // An unchanged cell still runs when asked to, with its dependents.
+        s.Stats.Reset();
+        await s.UpdateAsync(Doc(cells), runCell: "c2");
+        Assert.Equal(["c2"], s.Stats.RunLog);
+    }
+
+    [Fact]
+    public async Task Lazy_update_and_run_runs_the_cell_and_leaves_dependents_stale()
+    {
+        string[] cells = ["var a = 1;", "var b = a + 1;"];
+        await using var s = await Open(cells, lazy: true);
+        await s.RunAllAsync();
+        s.Stats.Reset();
+        cells[0] = "var a = 5;";
+        await s.UpdateAsync(Doc(cells), runCell: "c1");
+        Assert.Equal(["c1"], s.Stats.RunLog);
+        Assert.Equal(CellStatus.Stale, s.StatusOf("c2"));
+    }
+
+    [Fact]
     public async Task Moving_a_declaration_between_cells_keeps_both_values()
     {
         await using var s = await Open(["var y = 1;", "var x = 2;"]);

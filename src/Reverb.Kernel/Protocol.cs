@@ -31,6 +31,9 @@ public static class RequestTypes
     public const string RunAll = "runAll";
     public const string SetWidget = "setWidget";
     public const string SetLazy = "setLazy";
+
+    /// <summary>Analyse a version of the notebook without running it. Answered even while a cell runs.</summary>
+    public const string Analyze = "analyze";
     public const string Interrupt = "interrupt";
     public const string Shutdown = "shutdown";
 }
@@ -45,6 +48,9 @@ public static class EventTypes
     public const string Display = "cell.display";
     public const string Outputs = "cell.outputs";
     public const string Diagnostics = "notebook.diagnostics";
+
+    /// <summary>The answer to <see cref="RequestTypes.Analyze"/>: diagnostics and the dependency graph.</summary>
+    public const string Analysis = "notebook.analysis";
     public const string Error = "kernel.error";
 }
 
@@ -60,6 +66,9 @@ public sealed class KernelRequest
     public string? Cell { get; set; }
     public string? WidgetId { get; set; }
     public JsonElement? Value { get; set; }
+
+    /// <summary>The caller's version number for <see cref="Text"/>, echoed back in the answer.</summary>
+    public int? Version { get; set; }
 }
 
 public sealed class KernelEvent
@@ -76,6 +85,16 @@ public sealed class KernelEvent
     public OutputData? Output { get; set; }
     public List<OutputData>? Outputs { get; set; }
     public List<DiagnosticData>? Diagnostics { get; set; }
+    public List<EdgeData>? Graph { get; set; }
+    public int? Version { get; set; }
+}
+
+/// <summary>Cell <see cref="From"/> uses the names in <see cref="Via"/> from cell <see cref="To"/>.</summary>
+public sealed class EdgeData
+{
+    public string From { get; set; } = "";
+    public string To { get; set; } = "";
+    public List<string> Via { get; set; } = [];
 }
 
 /// <summary>An output in a message. Stream text appears as an output with <see cref="Stream"/> set.</summary>

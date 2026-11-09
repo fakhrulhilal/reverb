@@ -41,6 +41,10 @@ public static class KernelServer
             }
         });
 
+        // Analysis has its own worker so diagnostics keep coming while a cell runs.
+        var analyses = Channel.CreateUnbounded<KernelRequest>(new UnboundedChannelOptions { SingleReader = true });
+        var analyzer = Task.Run(() => AnalyzeLoopAsync(analyses.Reader, session.References, events));
+
         Warmup.Start();
         events.Send(new KernelEvent { Type = EventTypes.Ready });
 
@@ -59,6 +63,11 @@ public static class KernelServer
             }
             if (request is null) continue;
 
+            if (request.Type == RequestTypes.Analyze)
+            {
+                await analyses.Writer.WriteAsync(request);
+                continue;
+            }
             if (request.Type == RequestTypes.Interrupt)
             {
                 session.Interrupt();
@@ -73,7 +82,9 @@ public static class KernelServer
         }
 
         queue.Writer.TryComplete();
+        analyses.Writer.TryComplete();
         await processor;
+        await analyzer;
         await session.DisposeAsync();
         return 0;
     }
@@ -88,7 +99,7 @@ public static class KernelServer
                 await session.OpenAsync(NotebookDocument.Parse(r.Text ?? ""), r.Run ?? true);
                 return true;
             case RequestTypes.Update:
-                await session.UpdateAsync(NotebookDocument.Parse(r.Text ?? ""));
+                await session.UpdateAsync(NotebookDocument.Parse(r.Text ?? ""), r.Cell, r.Run ?? false);
                 return true;
             case RequestTypes.Run:
                 await session.RunCellAsync(r.Cell ?? "");
@@ -105,6 +116,44 @@ public static class KernelServer
                 return true;
             default:
                 throw new InvalidOperationException($"Unknown request type '{r.Type}'.");
+        }
+    }
+
+    /// <summary>
+    /// Answers analyze requests. When several are waiting, only the newest is analysed; the others
+    /// are answered as done without an analysis, since their text is already out of date.
+    /// </summary>
+    static async Task AnalyzeLoopAsync(ChannelReader<KernelRequest> reader, ReferenceSet references, ProtocolEvents events)
+    {
+        NotebookAnalysis? last = null;
+        while (await reader.WaitToReadAsync())
+        {
+            var batch = new List<KernelRequest>();
+            while (reader.TryRead(out var r)) batch.Add(r);
+            foreach (var skipped in batch.SkipLast(1))
+                events.Send(new KernelEvent { Type = EventTypes.Done, RequestId = skipped.Id, Ok = true });
+
+            var request = batch[^1];
+            try
+            {
+                var doc = NotebookDocument.Parse(request.Text ?? "");
+                last = last is null ? NotebookAnalysis.Create(doc, references) : last.Update(doc);
+                events.Send(new KernelEvent
+                {
+                    Type = EventTypes.Analysis,
+                    RequestId = request.Id,
+                    Version = request.Version,
+                    Diagnostics = [.. last.Diagnostics.Select(ToData)],
+                    Graph = [.. last.Graph.Edges.Select(e => new EdgeData { From = e.From, To = e.To, Via = [.. e.Via] })],
+                });
+                events.Send(new KernelEvent { Type = EventTypes.Done, RequestId = request.Id, Ok = true });
+            }
+            catch (Exception e)
+            {
+                last = null;
+                events.Send(new KernelEvent { Type = EventTypes.Error, Message = e.ToString() });
+                events.Send(new KernelEvent { Type = EventTypes.Done, RequestId = request.Id, Ok = false, Message = $"{e.GetType().Name}: {e.Message}" });
+            }
         }
     }
 

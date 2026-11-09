@@ -89,6 +89,7 @@ public sealed class KernelSession : IAsyncDisposable
     sealed class NoEvents : IKernelEvents;
 
     public IKernelEvents Events { get; }
+    public ReferenceSet References => references;
     public NotebookAnalysis? Analysis { get; private set; }
     public ValueStore Store { get; } = new();
     public SessionStats Stats { get; } = new();
@@ -132,8 +133,12 @@ public sealed class KernelSession : IAsyncDisposable
         }
     }
 
-    /// <summary>Applies an edited version of the notebook and re-runs (or marks stale) what it affects.</summary>
-    public async Task UpdateAsync(NotebookDocument doc)
+    /// <summary>
+    /// Applies an edited version of the notebook and re-runs (or marks stale) what it affects. Also
+    /// runs <paramref name="runCell"/> (as <see cref="RunCellAsync"/> would) or, with
+    /// <paramref name="runAll"/>, everything, in the same pass, so nothing runs twice.
+    /// </summary>
+    public async Task UpdateAsync(NotebookDocument doc, string? runCell = null, bool runAll = false)
     {
         CancelForNewWork();
         await gate.WaitAsync();
@@ -152,6 +157,8 @@ public sealed class KernelSession : IAsyncDisposable
                 Events.Diagnostics(Analysis);
                 Schedule(Affected(old, Analysis), explicitRun: false);
             }
+            if (runAll) pending.UnionWith(CodeCells().Select(c => c.Key));
+            else if (runCell is not null) ScheduleRun(runCell);
             await DrainAsync();
         }
         finally
@@ -160,23 +167,17 @@ public sealed class KernelSession : IAsyncDisposable
         }
     }
 
-    /// <summary>Runs a cell and everything downstream of it (in lazy mode, just the cell; dependents go stale).</summary>
+    /// <summary>
+    /// Runs a cell and everything downstream of it (in lazy mode, just the cell; dependents go
+    /// stale). Stale cells it depends on run first (see <see cref="AddStaleAncestors"/>).
+    /// </summary>
     public async Task RunCellAsync(string cell)
     {
         CancelForNewWork();
         await gate.WaitAsync();
         try
         {
-            if (Analysis?.Cell(cell) is not { Kind: CellKind.Code }) return;
-            if (Lazy)
-            {
-                pending.Add(cell);
-                MarkStale(Analysis.Graph.Downstream(cell));
-            }
-            else
-            {
-                pending.UnionWith(Analysis.Graph.RunSet(cell));
-            }
+            ScheduleRun(cell);
             await DrainAsync();
         }
         finally
@@ -259,6 +260,20 @@ public sealed class KernelSession : IAsyncDisposable
         return s;
     }
 
+    void ScheduleRun(string cell)
+    {
+        if (Analysis?.Cell(cell) is not { Kind: CellKind.Code }) return;
+        if (Lazy)
+        {
+            pending.Add(cell);
+            MarkStale(Analysis.Graph.Downstream(cell));
+        }
+        else
+        {
+            pending.UnionWith(Analysis.Graph.RunSet(cell));
+        }
+    }
+
     void Schedule(IReadOnlyCollection<string> cells, bool explicitRun)
     {
         if (Lazy && !explicitRun) MarkStale(cells);
@@ -323,6 +338,7 @@ public sealed class KernelSession : IAsyncDisposable
         while (pending.Count > 0 && Analysis is not null)
         {
             var analysis = Analysis;
+            AddStaleAncestors(analysis);
             var order = CodeCells().Where(c => pending.Contains(c.Key)).Select(c => c.Key).ToList();
             pending.IntersectWith(order); // drop cells that no longer exist
             if (order.Count == 0) return;
@@ -363,6 +379,36 @@ public sealed class KernelSession : IAsyncDisposable
                 return;
             }
         }
+    }
+
+    /// <summary>
+    /// A cell about to run must not read a missing or outdated value, so stale cells it depends on
+    /// (after a restart, an interrupt or a lazy edit) join the run, along with the cells between
+    /// them. Without lazy mode, everything downstream of those joins too, as for any change.
+    /// </summary>
+    void AddStaleAncestors(NotebookAnalysis analysis)
+    {
+        var graph = analysis.Graph;
+        bool IsStale(string k) => !pending.Contains(k) && analysis.Cell(k) is { Kind: CellKind.Code } && StatusOf(k) == CellStatus.Stale;
+        var added = new HashSet<string>(StringComparer.Ordinal);
+        var work = new Queue<string>(pending);
+        while (work.Count > 0)
+        {
+            var cell = work.Dequeue();
+            var upstream = graph.Upstream(cell);
+            foreach (var stale in upstream.Where(IsStale).ToList())
+            {
+                var downstream = graph.Downstream(stale).ToHashSet(StringComparer.Ordinal);
+                IEnumerable<string> join = Lazy ? [stale, .. upstream.Where(downstream.Contains)] : graph.RunSet(stale);
+                foreach (var k in join)
+                {
+                    if (!pending.Add(k)) continue;
+                    added.Add(k);
+                    work.Enqueue(k);
+                }
+            }
+        }
+        if (Lazy) MarkStale(added.SelectMany(k => graph.Downstream(k)).Where(k => !pending.Contains(k)).Distinct().ToList());
     }
 
     /// <summary>Runs one cell. Returns false if it was cancelled before it finished.</summary>
