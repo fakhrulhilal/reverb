@@ -95,7 +95,7 @@ public class LoadContextSpikeTests(ITestOutputHelper output)
         var nb = SpikeNotebook.Create(["var a = 1;", "var zero = a - 1;\n\nvar boom = a / zero;"]);
         RunAll(k, nb, "c1");
         var ex = Assert.Throws<DivideByZeroException>(() => RunAll(k, nb, "c2"));
-        output.WriteLine(ex.StackTrace);
+        output.WriteLine(ex.StackTrace ?? "");
         Assert.Contains("cell:c2:line 3", ex.StackTrace);
     }
 

@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Reverb.Kernel\Reverb.Kernel.csproj" />
+  </ItemGroup>
+</Project>

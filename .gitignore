@@ -8,3 +8,4 @@ TestResults/
 spikes/local-feed/
 spikes/.packages/
 *.received.txt
+artifacts/

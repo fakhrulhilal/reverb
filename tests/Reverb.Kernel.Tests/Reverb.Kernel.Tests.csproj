@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Reverb.Kernel\Reverb.Kernel.csproj" />
+    <!-- Built so tests can run `reverb exec`/`check` and start real kernel processes. -->
+    <ProjectReference Include="..\..\src\Reverb.Cli\Reverb.Cli.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>
