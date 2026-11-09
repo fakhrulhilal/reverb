@@ -1,0 +1,13 @@
+cells:
+  writer
+    out:    buffer: StringWriter
+    dispose later: buffer
+  read
+    in:     buffer: StringWriter <- writer
+    out:    written: string
+edges:
+  read -> writer [buffer]
+downstream:
+  writer: read
+  read: 
+diagnostics: none

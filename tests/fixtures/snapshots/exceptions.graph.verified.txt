@@ -1,0 +1,21 @@
+cells:
+  risky
+    out:    ParseOrThrow: Func<string, int>
+    uses types
+  attempt
+    in:     ParseOrThrow: Func<string, int> <- risky
+    out:    message: string
+    uses types
+  show
+    in:     message: string <- attempt
+edges:
+  risky -> types
+  attempt -> risky [ParseOrThrow]
+  attempt -> types
+  show -> attempt [message]
+downstream:
+  risky: attempt, show
+  attempt: show
+  show: 
+  types: risky, attempt, show
+diagnostics: none

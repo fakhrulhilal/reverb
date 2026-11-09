@@ -1,0 +1,24 @@
+cells:
+  box
+    out:    box: Box<int>
+    uses types
+  map
+    in:     box: Box<int> <- box
+    out:    doubled: int, mapped: Box<int>, Twice: Func<T, Func<T, T, T>, T>
+    unstored: Twice
+    uses types
+  show
+    in:     doubled: int <- map, mapped: Box<int> <- map
+    uses types
+edges:
+  box -> types
+  map -> box [box]
+  map -> types
+  show -> map [doubled, mapped]
+  show -> types
+downstream:
+  box: map, show
+  map: show
+  show: 
+  types: box, map, show
+diagnostics: none

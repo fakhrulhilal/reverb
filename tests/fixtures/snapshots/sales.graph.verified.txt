@@ -1,0 +1,21 @@
+cells:
+  data
+    out:    orders: List<Order>, regions: string[], rng: Random
+    uses types
+  threshold
+    out:    threshold: Slider
+  summary
+    in:     orders: List<Order> <- data, threshold: Slider <- threshold
+    out:    big: List<Order>
+    uses types
+edges:
+  data -> types
+  summary -> data [orders]
+  summary -> threshold [threshold]
+  summary -> types
+downstream:
+  data: summary
+  threshold: summary
+  summary: 
+  types: data, summary
+diagnostics: none

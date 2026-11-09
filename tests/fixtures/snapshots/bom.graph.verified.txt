@@ -1,0 +1,11 @@
+cells:
+  greeting
+    out:    greeting: string
+  show
+    in:     greeting: string <- greeting
+edges:
+  show -> greeting [greeting]
+downstream:
+  greeting: show
+  show: 
+diagnostics: none

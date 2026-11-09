@@ -1,0 +1,19 @@
+cells:
+  input
+    out:    text: string, value: object
+  match
+    in:     text: string <- input, value: object <- input
+    out:    fromText: int, guarded: int, isInt: bool, number: int, parsed: bool
+    unstored: number
+  use
+    in:     fromText: int <- match, guarded: int <- match, isInt: bool <- match, parsed: bool <- match, value: object <- input
+    out:    description: string
+edges:
+  match -> input [text, value]
+  use -> input [value]
+  use -> match [fromText, guarded, isInt, parsed]
+downstream:
+  input: match, use
+  match: use
+  use: 
+diagnostics: none

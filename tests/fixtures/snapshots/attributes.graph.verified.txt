@@ -1,0 +1,21 @@
+cells:
+  load
+    out:    data: int[]
+  hidden
+    in:     data: int[] <- load
+    out:    hidden: int
+  off
+    in:     hidden: int <- hidden
+    out:    off: int
+  show
+    in:     hidden: int <- hidden
+edges:
+  hidden -> load [data]
+  off -> hidden [hidden]
+  show -> hidden [hidden]
+downstream:
+  load: hidden, off, show
+  hidden: off, show
+  off: 
+  show: 
+diagnostics: none

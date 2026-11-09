@@ -1,0 +1,18 @@
+cells:
+  pair
+    out:    first: int, second: int, x: int, y: int
+  person
+    out:    age: int, name: string, person: Person
+    uses types
+  show
+    in:     age: int <- person, first: int <- pair, name: string <- person, second: int <- pair, x: int <- pair, y: int <- pair
+edges:
+  person -> types
+  show -> pair [first, second, x, y]
+  show -> person [age, name]
+downstream:
+  pair: show
+  person: show
+  show: 
+  types: person, show
+diagnostics: none

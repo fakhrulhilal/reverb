@@ -1,0 +1,12 @@
+cells:
+  values
+    out:    hyp: double, pair: (int Left, int Right)
+  show
+    in:     hyp: double <- values
+    out:    sb: StringBuilder
+edges:
+  show -> values [hyp]
+downstream:
+  values: show
+  show: 
+diagnostics: none

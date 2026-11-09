@@ -1,0 +1,15 @@
+cells:
+  empty
+  a
+    out:    a: int
+  blank-lines
+  b
+    in:     a: int <- a
+edges:
+  b -> a [a]
+downstream:
+  empty: 
+  a: b
+  blank-lines: 
+  b: 
+diagnostics: none

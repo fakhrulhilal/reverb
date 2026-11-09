@@ -1,0 +1,11 @@
+cells:
+  a
+    out:    a: int
+  b
+    in:     a: int <- a
+edges:
+  b -> a [a]
+downstream:
+  a: b
+  b: 
+diagnostics: none

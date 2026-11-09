@@ -1,0 +1,12 @@
+cells:
+  count
+    in:     args: string[] <- (args)
+    out:    count: int
+  show
+    in:     args: string[] <- (args), count: int <- count
+edges:
+  show -> count [count]
+downstream:
+  count: show
+  show: 
+diagnostics: none

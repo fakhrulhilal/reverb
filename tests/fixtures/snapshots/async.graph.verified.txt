@@ -1,0 +1,12 @@
+cells:
+  fetch
+    out:    results: int[], SlowSquare: Func<int, Task<int>>
+  sum
+    in:     results: int[] <- fetch
+    out:    total: int
+edges:
+  sum -> fetch [results]
+downstream:
+  fetch: sum
+  sum: 
+diagnostics: none

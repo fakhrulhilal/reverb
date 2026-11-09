@@ -1,0 +1,11 @@
+cells:
+  value
+    out:    value: int
+  print
+    in:     value: int <- value
+edges:
+  print -> value [value]
+downstream:
+  value: print
+  print: 
+diagnostics: none

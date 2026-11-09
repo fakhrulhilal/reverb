@@ -1,0 +1,26 @@
+cells:
+  shapes
+    out:    shapes: List<IShape>
+    uses types
+  areas
+    in:     shapes: List<IShape> <- shapes
+    out:    areas: List<Area>
+    uses types
+  largest
+    in:     areas: List<Area> <- areas
+    out:    largest: Area
+    uses types
+edges:
+  shapes -> types
+  areas -> shapes [shapes]
+  areas -> types
+  largest -> areas [areas]
+  largest -> types
+downstream:
+  shapes: areas, largest
+  areas: largest
+  largest: 
+  types: shapes, areas, largest
+diagnostics:
+  types 25:16-25:17 warning CS0649: Field 'Point.X' is never assigned to, and will always have its default value 0
+  types 26:16-26:17 warning CS0649: Field 'Point.Y' is never assigned to, and will always have its default value 0

@@ -1,0 +1,20 @@
+cells:
+  source
+    out:    anon: <anonymous type: string Name>, count: int
+    unstored: anon
+  reassign
+  uses-anon
+    in:     anon: <anonymous type: string Name> <- source
+  fine
+edges:
+  uses-anon -> source [anon]
+downstream:
+  source: uses-anon
+  reassign: 
+  uses-anon: 
+  fine: 
+diagnostics:
+  source 1:5-1:10 warning CS0219: The variable 'count' is assigned but its value is never used
+  source 2:5-2:9 warning RVB002: 'anon' can't be passed to other cells because its type is an anonymous type. It's used by cell 'uses-anon'. Use a record from the types cell or a named tuple instead, e.g. (Region: g.Key, Count: g.Count()).
+  reassign 1:1-1:6 error RVB001: This cell changes 'count', which is declared in cell 'source'. A variable can only be set in the cell that declares it. Declare a new variable here instead, e.g. var count2 = ...;
+  uses-anon 1:19-1:23 error RVB002: 'anon' comes from cell 'source' and its type is an anonymous type, so it can't be passed to another cell. Use a record from the types cell or a named tuple instead, e.g. (Region: g.Key, Count: g.Count()).

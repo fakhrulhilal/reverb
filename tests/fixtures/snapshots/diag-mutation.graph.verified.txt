@@ -1,0 +1,17 @@
+cells:
+  list
+    out:    items: List<string>, lookup: Dictionary<string, int>
+  change
+    in:     items: List<string> <- list, lookup: Dictionary<string, int> <- list
+  read
+    in:     items: List<string> <- list, lookup: Dictionary<string, int> <- list
+edges:
+  change -> list [items, lookup]
+  read -> list [items, lookup]
+downstream:
+  list: change, read
+  change: 
+  read: 
+diagnostics:
+  change 1:1-1:15 warning RVB005: 'Add' changes 'items' in place, but 'items' is declared in cell 'list'. Reverb only tracks assignments, so cells that read 'items' won't re-run. Build a new value in a new variable instead (LINQ, 'with', or a copy).
+  change 2:1-2:12 warning RVB005: This changes part of 'lookup', which is declared in cell 'list'. Reverb only tracks assignments, so cells that read 'lookup' won't re-run. Build a new value in a new variable instead.

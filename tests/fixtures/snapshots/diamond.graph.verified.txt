@@ -1,0 +1,23 @@
+cells:
+  root
+    out:    root: int
+  left
+    in:     root: int <- root
+    out:    left: int
+  right
+    in:     root: int <- root
+    out:    right: int
+  join
+    in:     left: int <- left, right: int <- right
+    out:    joined: int
+edges:
+  left -> root [root]
+  right -> root [root]
+  join -> left [left]
+  join -> right [right]
+downstream:
+  root: left, right, join
+  left: join
+  right: join
+  join: 
+diagnostics: none

@@ -1,0 +1,12 @@
+cells:
+  controls
+    out:    query: TextBox, refresh: Button, region: Dropdown<string>, rows: NumberBox<int>, showAll: Checkbox, size: Slider
+  report
+    in:     query: TextBox <- controls, refresh: Button <- controls, region: Dropdown<string> <- controls, rows: NumberBox<int> <- controls, showAll: Checkbox <- controls, size: Slider <- controls
+    out:    line: string
+edges:
+  report -> controls [query, refresh, region, rows, showAll, size]
+downstream:
+  controls: report
+  report: 
+diagnostics: none

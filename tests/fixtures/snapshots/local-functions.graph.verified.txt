@@ -1,0 +1,18 @@
+cells:
+  factor
+    out:    factor: int
+  helpers
+    in:     factor: int <- factor
+    out:    Scale: Func<int, int>, Square: Func<int, int>
+  use
+    in:     factor: int <- factor, Scale: Func<int, int> <- helpers, Square: Func<int, int> <- helpers
+    out:    scaled: int, squareIt: Func<int, int>, squared: int
+edges:
+  helpers -> factor [factor]
+  use -> factor [factor]
+  use -> helpers [Scale, Square]
+downstream:
+  factor: helpers, use
+  helpers: use
+  use: 
+diagnostics: none

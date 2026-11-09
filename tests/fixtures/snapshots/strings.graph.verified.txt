@@ -1,0 +1,16 @@
+cells:
+  name
+    out:    name: string
+  build
+    in:     name: string <- name
+    out:    json: string, prefix: string, sb: StringBuilder
+  show
+    in:     json: string <- build, prefix: string <- build
+edges:
+  build -> name [name]
+  show -> build [json, prefix]
+downstream:
+  name: build, show
+  build: show
+  show: 
+diagnostics: none

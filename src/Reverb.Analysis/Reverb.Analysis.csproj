@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Analysis compilation, dependency graph, Reverb diagnostics and per-cell code generation. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Reverb.Format\Reverb.Format.csproj" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="$(RoslynVersion)" />
+  </ItemGroup>
+</Project>

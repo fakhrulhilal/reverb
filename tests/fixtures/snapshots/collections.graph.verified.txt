@@ -1,0 +1,17 @@
+cells:
+  data
+    out:    extra: int[], more: int[], stock: Dictionary<string, int>, wanted: HashSet<string>
+  available
+    in:     stock: Dictionary<string, int> <- data, wanted: HashSet<string> <- data
+    out:    available: List<string>
+  show
+    in:     available: List<string> <- available, more: int[] <- data, stock: Dictionary<string, int> <- data
+edges:
+  available -> data [stock, wanted]
+  show -> data [more, stock]
+  show -> available [available]
+downstream:
+  data: available, show
+  available: show
+  show: 
+diagnostics: none

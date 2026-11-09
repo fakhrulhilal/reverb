@@ -1,0 +1,23 @@
+cells:
+  a
+    out:    a: int
+  b
+    in:     a: int <- a
+    out:    b: int
+  c
+    in:     b: int <- b
+    out:    c: int
+  d
+    in:     a: int <- a, b: int <- b, c: int <- c
+edges:
+  b -> a [a]
+  c -> b [b]
+  d -> a [a]
+  d -> b [b]
+  d -> c [c]
+downstream:
+  a: b, c, d
+  b: c, d
+  c: d
+  d: 
+diagnostics: none

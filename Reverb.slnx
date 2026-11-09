@@ -1,5 +1,12 @@
 <Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Reverb.Analysis/Reverb.Analysis.csproj" />
+    <Project Path="src/Reverb.Format/Reverb.Format.csproj" />
+    <Project Path="src/Reverb.Runtime/Reverb.Runtime.csproj" />
+  </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Reverb.Analysis.Tests/Reverb.Analysis.Tests.csproj" />
+    <Project Path="tests/Reverb.Format.Tests/Reverb.Format.Tests.csproj" />
     <Project Path="tests/Reverb.Spikes.Tests/Reverb.Spikes.Tests.csproj" />
   </Folder>
 </Solution>

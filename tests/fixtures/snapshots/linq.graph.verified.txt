@@ -1,0 +1,28 @@
+cells:
+  numbers
+    out:    numbers: int[]
+  query
+    in:     numbers: int[] <- numbers
+    out:    evens: IOrderedEnumerable<int>
+  method
+    in:     numbers: int[] <- numbers
+    out:    odds: int[]
+  groups
+    in:     numbers: int[] <- numbers
+    out:    groups: List<(int Remainder, int Count)>
+  show
+    in:     evens: IOrderedEnumerable<int> <- query, groups: List<(int Remainder, int Count)> <- groups, odds: int[] <- method
+edges:
+  query -> numbers [numbers]
+  method -> numbers [numbers]
+  groups -> numbers [numbers]
+  show -> query [evens]
+  show -> method [odds]
+  show -> groups [groups]
+downstream:
+  numbers: query, method, groups, show
+  query: show
+  method: show
+  groups: show
+  show: 
+diagnostics: none
