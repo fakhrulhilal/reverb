@@ -25,7 +25,7 @@ export function tempFolder(): string {
 }
 
 /** Runs `reverb <command> <file> --no-browser` and waits for the address it prints. */
-export async function startReverb(command: "new" | "edit", file: string): Promise<{ reverb: Reverb; process: ChildProcess }> {
+export async function startReverb(command: "new" | "edit" | "run", file: string): Promise<{ reverb: Reverb; process: ChildProcess }> {
   if (!existsSync(cli)) throw new Error(`Build the CLI first (dotnet build): ${cli} doesn't exist.`);
   const child = spawn("dotnet", [cli, command, file, "--no-browser"], {
     cwd: join(file, ".."),
