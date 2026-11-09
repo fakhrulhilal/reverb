@@ -21,7 +21,8 @@ public class ServerTests(ITestOutputHelper output)
         await using var client = await server.ConnectAsync();
         await client.WaitFor(() => client.Stdout("c3") == "11\n", what: "the first run");
         Assert.Equal(["setup", "c1", "c2", "c3"], client.CellIds());
-        Assert.Contains(client.Edges, e => e.From == "c3" && e.To == "c2" && e.Via.SequenceEqual(["b"]));
+        // The graph comes from a separate analysis, so it can arrive after the first outputs.
+        await client.WaitFor(() => client.Edges.Any(e => e.From == "c3" && e.To == "c2" && e.Via.SequenceEqual(["b"])), what: "the dependency graph");
 
         // A second tab sees the same state straight away.
         await using var second = await server.ConnectAsync();
