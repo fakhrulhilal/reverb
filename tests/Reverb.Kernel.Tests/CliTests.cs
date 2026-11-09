@@ -85,7 +85,7 @@ public class CliTests(ITestOutputHelper output)
         Assert.All(cells, c => Assert.Equal("idle", c.GetProperty("status").GetString()));
         var d = cells[3].GetProperty("outputs")[0];
         Assert.Equal("stdout", d.GetProperty("stream").GetString());
-        Assert.Equal("a=2 b=20 c=21\n", d.GetProperty("text").GetString());
+        Assert.Equal("a=2 b=20 c=21\n", Normalize(d.GetProperty("text").GetString()!));
     }
 
     [Fact]

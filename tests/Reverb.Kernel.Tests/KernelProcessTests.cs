@@ -12,7 +12,7 @@ public class KernelProcessTests(ITestOutputHelper output)
     {
         public ConcurrentQueue<KernelEvent> Events { get; } = new();
         public string? StatusOf(string cell) => Events.LastOrDefault(e => e.Type == EventTypes.Status && e.Cell == cell)?.Status;
-        public string Stdout(string cell) => string.Concat(Events.Where(e => e.Type == EventTypes.Stream && e.Cell == cell && e.Stream == "stdout").Select(e => e.Text));
+        public string Stdout(string cell) => string.Concat(Events.Where(e => e.Type == EventTypes.Stream && e.Cell == cell && e.Stream == "stdout").Select(e => e.Text)).ReplaceLineEndings("\n");
     }
 
     static async Task<(KernelClient Client, Recorder Recorder)> StartAsync(string text)

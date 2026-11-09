@@ -24,7 +24,7 @@ public class SessionTests(ITestOutputHelper output)
 
     static string Text(CellOutputItem item) => item switch
     {
-        StreamItem st => $"{st.Stream}:{st.Text}",
+        StreamItem st => $"{st.Stream}:{st.Text.ReplaceLineEndings("\n")}",
         DisplayItem d => $"display:{(d.Output.Title is null ? "" : d.Output.Title + ":")}{d.Output.Text}",
         _ => "?",
     };
