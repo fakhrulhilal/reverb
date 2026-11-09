@@ -241,7 +241,12 @@ sealed class TestClient : IAsyncDisposable
 
     public string Describe()
     {
-        lock (gate) return string.Join(" | ", Cells.Select(c => $"{c.Id}={c.Status} '{string.Concat(c.Outputs.Select(o => o.Text ?? o.Data?[Output.PlainText])).ReplaceLineEndings(" ")}'"));
+        lock (gate)
+        {
+            var cells = string.Join(" | ", Cells.Select(c => $"{c.Id}={c.Status} runs={c.Runs} '{string.Concat(c.Outputs.Select(o => o.Text ?? o.Data?[Output.PlainText])).ReplaceLineEndings(" ")}'"));
+            var kernel = string.Join(" / ", Messages.Where(m => m.Type is BrowserMessages.KernelStatus or BrowserMessages.Error).Select(m => $"{m.State ?? "error"}: {m.Message}"));
+            return $"{cells}. Kernel now {KernelState}; kernel and error messages: {kernel}";
+        }
     }
 
     public async ValueTask DisposeAsync()

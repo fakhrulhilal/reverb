@@ -5,7 +5,7 @@ namespace Reverb.Server.Tests;
 [Collection("server")]
 public class WidgetAndAppTests
 {
-    // The sales explorer sample from the README, as written there.
+    // The sales explorer sample notebook.
     const string Sales = """
         #!/usr/bin/env dotnet
         #:package Reverb.Runtime@0.1.0
