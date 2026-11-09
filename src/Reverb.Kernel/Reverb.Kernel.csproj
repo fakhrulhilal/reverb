@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Runs cells: compile cache, load contexts, value store, scheduler, output capture,
+    and the stdio protocol the kernel process speaks. Also the client that starts one.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Reverb.Analysis\Reverb.Analysis.csproj" />
+    <ProjectReference Include="..\Reverb.Runtime\Reverb.Runtime.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Reverb.Kernel.Tests" />
+    <InternalsVisibleTo Include="Reverb.Consistency.Tests" />
+  </ItemGroup>
+</Project>
