@@ -553,8 +553,10 @@ public sealed class NotebookHost : IAsyncDisposable
             SetKernelState("dead", $"The kernel stopped (exit code {exitCode}) three times in a minute, so Reverb stopped restarting it.{(options.AppMode ? "" : " Fix the cell that stops it, then press Restart.")}");
             return;
         }
-        SetKernelState("dead", $"The kernel stopped (exit code {exitCode}). Starting a new one; run cells again to get their values back.");
-        Post(() => RestartKernelAsync($"The kernel stopped (exit code {exitCode}) and was restarted. Run cells to get their values back."));
+        SetKernelState("dead", $"The kernel stopped (exit code {exitCode}). Starting a new one.");
+        Post(() => RestartKernelAsync(options.AppMode
+            ? $"The kernel stopped (exit code {exitCode}) and was restarted."
+            : $"The kernel stopped (exit code {exitCode}) and was restarted. Run cells to get their values back."));
     }
 
     void MarkAllStale()
