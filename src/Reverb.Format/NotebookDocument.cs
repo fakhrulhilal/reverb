@@ -73,6 +73,34 @@ public sealed record NotebookDocument
         return this with { Preamble = new Preamble([.. kept]) };
     }
 
+    /// <summary>
+    /// Turns a flag on the <c>// reverb-notebook v1</c> header line on or off (for example <c>lazy</c>).
+    /// Adds the header if the file doesn't have one.
+    /// </summary>
+    public NotebookDocument WithHeaderFlag(string flag, bool on)
+    {
+        if (flag.Length == 0 || !flag.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-'))
+            throw new ArgumentException($"'{flag}' isn't a valid header flag. Use letters, digits, '-' and '_' only.", nameof(flag));
+
+        var lines = Preamble.Lines.ToList();
+        var index = Preamble.HeaderIndex;
+        var header = Preamble.Header ?? new NotebookHeader(NotebookHeader.CurrentVersion, []);
+        if (header.Flags.Contains(flag) == on && index >= 0) return this;
+
+        var flags = on ? header.Flags.Remove(flag).Add(flag) : header.Flags.Remove(flag);
+        var text = string.Join(' ', [$"// reverb-notebook v{header.Version}", .. flags]);
+        if (index >= 0)
+        {
+            lines[index] = lines[index] with { Text = text };
+        }
+        else
+        {
+            var at = lines.FindLastIndex(l => Preamble.IsDirective(l) || l.Text.StartsWith("#!", StringComparison.Ordinal)) + 1;
+            lines.Insert(at, new PreambleLine(text, Newline));
+        }
+        return this with { Preamble = new Preamble([.. lines]) };
+    }
+
     int RequireIndex(string key) =>
         IndexOf(key) is var i and >= 0 ? i : throw new KeyNotFoundException($"There is no cell '{key}' in this notebook.");
 
