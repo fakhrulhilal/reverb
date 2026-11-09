@@ -185,4 +185,13 @@ public class KernelProcessTests(ITestOutputHelper output)
         client.Interrupt();
         await open.WaitAsync(TimeSpan.FromSeconds(5));
     }
+
+    [Fact]
+    public async Task Kernels_starting_at_the_same_time_share_their_config_safely()
+    {
+        // The notebook path is part of the config, so a new one means a file nobody has written yet: all eight race to write it.
+        var notebook = Path.Combine(Path.GetTempPath(), $"race-{Guid.NewGuid():N}.cs");
+        var clients = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => KernelClient.StartAsync(new KernelLaunch { EntryAssembly = Cli.CliAssembly, NotebookPath = notebook })));
+        foreach (var c in clients) await c.DisposeAsync();
+    }
 }

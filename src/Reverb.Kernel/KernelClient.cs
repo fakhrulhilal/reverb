@@ -317,7 +317,36 @@ public static class FileBasedAppRuntime
         var dir = Path.Combine(Path.GetTempPath(), "reverb", "kernels");
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, $"kernel-{hash}.runtimeconfig.json");
-        if (!File.Exists(path)) File.WriteAllText(path, json);
+        if (!File.Exists(path)) WriteOnce(path, json);
         return path;
+    }
+
+    /// <summary>
+    /// Writes a file that other processes may be writing or reading at the same moment (two
+    /// kernels starting together). Written under a unique name and moved into place, so nobody
+    /// sees half a file; if another process got there first, its copy is identical.
+    /// </summary>
+    static void WriteOnce(string path, string text)
+    {
+        var temp = $"{path}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            File.WriteAllText(temp, text);
+            File.Move(temp, path, overwrite: false);
+        }
+        catch (IOException) when (File.Exists(path))
+        {
+            // Someone else wrote it first.
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(temp);
+            }
+            catch (IOException)
+            {
+            }
+        }
     }
 }
