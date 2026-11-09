@@ -11,9 +11,10 @@
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Reverb.Kernel\Reverb.Kernel.csproj" />
+    <ProjectReference Include="..\Reverb.Server\Reverb.Server.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Reverb.Kernel.Tests" />
+    <InternalsVisibleTo Include="Reverb.Server.Tests" />
   </ItemGroup>
 </Project>

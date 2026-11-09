@@ -14,7 +14,11 @@ static class Program
                                              Exits non-zero if any cell fails.
           check <file.cs>                    Report compiler and notebook diagnostics.
                                              Exits non-zero if there are errors.
-          new, edit, run, export, convert    Not available yet.
+          new <file.cs>                      Create a notebook and open it in the editor.
+          edit <file.cs>                     Open a notebook in the editor (a local web page).
+              --port <n>                     Port to listen on (default: any free port).
+              --no-browser                   Print the address instead of opening a browser.
+          run, export, convert               Not available yet.
 
         Options:
           --version                          Print the version.
@@ -46,8 +50,12 @@ static class Program
             case "--help" or "-h" or "help":
                 Console.WriteLine(Usage);
                 return 0;
-            case "new" or "edit" or "run" or "export" or "convert":
-                Console.Error.WriteLine($"'reverb {args[0]}' isn't available in this version yet. For now you can use 'reverb exec', 'reverb check', or 'dotnet run <file.cs>'.");
+            case "edit":
+                return await EditCommand.RunEditAsync(args[1..]);
+            case "new":
+                return await EditCommand.RunNewAsync(args[1..]);
+            case "run" or "export" or "convert":
+                Console.Error.WriteLine($"'reverb {args[0]}' isn't available in this version yet. For now you can use 'reverb edit', 'reverb exec', 'reverb check', or 'dotnet run <file.cs>'.");
                 return 2;
             default:
                 Console.Error.WriteLine($"Unknown command '{args[0]}'.\n");
