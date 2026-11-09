@@ -15,9 +15,11 @@ public static class KernelServer
     public static async Task<int> RunAsync(TextReader input, Stream output)
     {
         // Keep the real stdout for protocol messages; Console.Out is routed to cells from here on.
+        KernelTrace.Mark("server starting");
         var writer = new StreamWriter(output, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
         var events = new ProtocolEvents(writer);
         var session = new KernelSession(events);
+        KernelTrace.Mark("session created");
         var queue = Channel.CreateUnbounded<KernelRequest>(new UnboundedChannelOptions { SingleReader = true });
 
         var processor = Task.Run(async () =>
@@ -46,7 +48,9 @@ public static class KernelServer
         var analyzer = Task.Run(() => AnalyzeLoopAsync(analyses.Reader, session.References, events));
 
         Warmup.Start();
+        KernelTrace.Mark("sending ready");
         events.Send(new KernelEvent { Type = EventTypes.Ready });
+        KernelTrace.Mark("ready sent");
 
         while (await input.ReadLineAsync() is { } line)
         {

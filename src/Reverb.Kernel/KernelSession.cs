@@ -79,8 +79,10 @@ public sealed class KernelSession : IAsyncDisposable
     public KernelSession(IKernelEvents? events = null, ReferenceSet? references = null)
     {
         KernelHost.Install();
+        KernelTrace.Mark("console routed");
         Events = events ?? new NoEvents();
         this.references = references ?? DefaultReferences.Value;
+        KernelTrace.Mark("references loaded");
         compiler = new CellCompiler(this.references);
     }
 

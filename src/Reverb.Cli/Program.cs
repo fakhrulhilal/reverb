@@ -42,7 +42,9 @@ static class Program
         switch (args[0])
         {
             case "__kernel":
+                KernelTrace.Mark("main");
                 Console.InputEncoding = new UTF8Encoding(false);
+                KernelTrace.Mark("input encoding set");
                 return await KernelServer.RunAsync(new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false)), Console.OpenStandardOutput());
             case "exec":
                 return await ExecCommand.RunAsync(args[1..]);
