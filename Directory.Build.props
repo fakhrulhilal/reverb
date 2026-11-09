@@ -1,0 +1,21 @@
+<Project>
+  <!--
+    Shared settings for everything in this repo. Warnings-as-errors lives in
+    src/Directory.Build.props instead, because this file is also imported by
+    any notebook (file-based app) under the repo, and with warnings as errors
+    the NU1903 advisory on Microsoft.DotNet.ILCompiler breaks `dotnet run`.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+
+    <!-- Pinned to the compiler that ships with the SDK we support (10.0.302 ships Roslyn 5.6.0). -->
+    <RoslynVersion>5.6.0</RoslynVersion>
+    <XunitVersion>3.2.2</XunitVersion>
+    <XunitRunnerVersion>3.1.5</XunitRunnerVersion>
+    <TestSdkVersion>18.11.0</TestSdkVersion>
+  </PropertyGroup>
+</Project>

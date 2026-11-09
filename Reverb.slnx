@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/Reverb.Spikes.Tests/Reverb.Spikes.Tests.csproj" />
+  </Folder>
+</Solution>
