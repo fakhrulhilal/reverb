@@ -356,7 +356,9 @@ public sealed class KernelSession : IAsyncDisposable
 
             foreach (var key in order) SetStatus(key, CellStatus.Queued, null, null);
 
+            KernelTrace.Mark($"running {string.Join(", ", order)}");
             compiler.EnsureTypes(analysis, out typesFailure);
+            KernelTrace.Mark("types ready");
 
             CancellationTokenSource cts;
             lock (cancelGate)
@@ -465,7 +467,9 @@ public sealed class KernelSession : IAsyncDisposable
             }
         }
 
+        KernelTrace.Mark($"{key}: compiling");
         var run = compiler.GetCell(analysis, generated.Code!, cell.UsesTypes, out var failure);
+        KernelTrace.Mark($"{key}: compiled");
         if (run is null)
         {
             SetStatus(key, CellStatus.Error, null, failure!.Message);

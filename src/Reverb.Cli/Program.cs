@@ -42,6 +42,7 @@ static class Program
         switch (args[0])
         {
             case "__kernel":
+                KernelTrace.Enable();
                 KernelTrace.Mark("main");
                 return await KernelServer.RunAsync(new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false)), Console.OpenStandardOutput());
             case "exec":

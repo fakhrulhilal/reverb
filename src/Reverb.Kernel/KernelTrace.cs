@@ -9,7 +9,10 @@ namespace Reverb.Kernel;
 /// </summary>
 public static class KernelTrace
 {
-    static readonly bool enabled = Environment.GetEnvironmentVariable("REVERB_KERNEL_TRACE") is { Length: > 0 };
+    static bool enabled;
+
+    /// <summary>Called by the kernel process at startup; sessions in other processes stay quiet.</summary>
+    public static void Enable() => enabled = Environment.GetEnvironmentVariable("REVERB_KERNEL_TRACE") is { Length: > 0 };
     static readonly Stopwatch clock = Stopwatch.StartNew();
     static readonly Lock gate = new();
     static StreamWriter? writer;

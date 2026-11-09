@@ -56,6 +56,26 @@ sealed class TestServer : IAsyncDisposable
         return client;
     }
 
+    /// <summary>
+    /// Managed stacks of a stuck kernel, when the dotnet-stack tool is installed (CI installs it).
+    /// </summary>
+    static string Stacks(int pid)
+    {
+        try
+        {
+            var info = new System.Diagnostics.ProcessStartInfo("dotnet-stack") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+            foreach (var a in new[] { "report", "-p", pid.ToString(System.Globalization.CultureInfo.InvariantCulture) }) info.ArgumentList.Add(a);
+            using var p = System.Diagnostics.Process.Start(info)!;
+            var output = p.StandardOutput.ReadToEndAsync();
+            if (!p.WaitForExit(30_000)) p.Kill();
+            return "\nkernel stacks:\n" + output.Result + p.StandardError.ReadToEnd();
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return ""; // dotnet-stack isn't installed
+        }
+    }
+
     /// <summary>Whether the kernel process is working or stuck, for timeout messages.</summary>
     string DescribeKernel()
     {
@@ -64,7 +84,7 @@ sealed class TestServer : IAsyncDisposable
         {
             using var p = System.Diagnostics.Process.GetProcessById(pid);
             var cpu = p.HasExited ? "exited" : $"{p.TotalProcessorTime.TotalSeconds:F1} s CPU, {p.Threads.Count} threads, started {(DateTime.Now - p.StartTime).TotalSeconds:F0} s ago";
-            return $"kernel {pid}: {cpu}; stderr: {Host.KernelStandardError.Trim()}";
+            return $"kernel {pid}: {cpu}; stderr: {Host.KernelStandardError.Trim()}{(p.HasExited ? "" : Stacks(pid))}";
         }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
         {
