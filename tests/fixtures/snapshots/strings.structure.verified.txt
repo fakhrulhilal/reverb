@@ -1,0 +1,21 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+  [1] code id=name
+      | var name = "Reverb";
+  [2] code id=build
+      | var json = $$"""
+      |     { "name": "{{name}}", "length": {{name.Length}} }
+      |     """;
+      | var sb = new System.Text.StringBuilder();
+      | for (var i = 0; i < 3; i++) sb.Append(name[i]);
+      | var prefix = sb.ToString();
+  [3] code id=show
+      | Console.WriteLine(json);
+      | Console.WriteLine(prefix);
+diagnostics: none

@@ -1,0 +1,20 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+      | using System.Text;
+      | using static System.Math;
+      | using Inv = System.Globalization.CultureInfo;
+      | using Pair = (int Left, int Right);
+  [1] code id=values
+      | Pair pair = (3, 4);
+      | var hyp = Sqrt(pair.Left * pair.Left + pair.Right * pair.Right);
+  [2] code id=show
+      | var sb = new StringBuilder().Append(hyp);
+      | Console.WriteLine(sb.ToString());
+      | Console.WriteLine(hyp.ToString("F1", Inv.InvariantCulture));
+diagnostics: none

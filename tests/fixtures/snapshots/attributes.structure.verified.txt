@@ -1,0 +1,17 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+  [1] code id=load name="Load data"
+      | var data = new[] { 1, 2, 3 };
+  [2] code id=hidden hide_code
+      | var hidden = data.Length;
+  [3] code id=off disabled
+      | var off = hidden * 100;
+  [4] code id=show name="Show results" hide_code
+      | Console.WriteLine(hidden);
+diagnostics: none

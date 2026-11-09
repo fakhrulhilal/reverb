@@ -1,0 +1,30 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+  [1] code id=risky
+      | static int ParseOrThrow(string s) =>
+      |     int.TryParse(s, out var v) ? v : throw new BadInputException(s);
+  [2] code id=attempt
+      | string message;
+      | try
+      | {
+      |     ParseOrThrow("nope");
+      |     message = "parsed";
+      | }
+      | catch (BadInputException e)
+      | {
+      |     message = $"bad input: {e.Input}";
+      | }
+  [3] code id=show
+      | Console.WriteLine(message);
+  [4] types
+      | class BadInputException(string input) : Exception($"Can't parse '{input}'")
+      | {
+      |     public string Input { get; } = input;
+      | }
+diagnostics: none

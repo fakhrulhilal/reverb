@@ -1,0 +1,18 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+  [1] code id=source
+      | var count = 1;
+      | var anon = new { Name = "x" };
+  [2] code id=reassign
+      | count = 2;
+  [3] code id=uses-anon
+      | Console.WriteLine(anon.Name);
+  [4] code id=fine
+      | Console.WriteLine("this cell is fine");
+diagnostics: none

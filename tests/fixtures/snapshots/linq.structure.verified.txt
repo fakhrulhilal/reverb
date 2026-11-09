@@ -1,0 +1,31 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+  [1] markdown id=intro
+      | # LINQ basics
+      | Query syntax and method syntax side by side.
+  [2] code id=numbers
+      | int[] numbers = [5, 3, 8, 1, 9, 2, 7];
+  [3] code id=query
+      | var evens = from n in numbers
+      |             where n % 2 == 0
+      |             orderby n
+      |             select n;
+  [4] code id=method
+      | var odds = numbers.Where(n => n % 2 == 1).Order().ToArray();
+  [5] code id=groups
+      | var groups = numbers
+      |     .GroupBy(n => n % 3)
+      |     .Select(g => (Remainder: g.Key, Count: g.Count()))
+      |     .OrderBy(t => t.Remainder)
+      |     .ToList();
+  [6] code id=show
+      | Console.WriteLine(string.Join(",", evens));
+      | Console.WriteLine(string.Join(",", odds));
+      | groups.Dump("by remainder");
+diagnostics: none

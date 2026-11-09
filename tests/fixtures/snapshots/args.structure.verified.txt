@@ -1,0 +1,13 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+  [1] code id=count
+      | var count = args.Length;
+  [2] code id=show
+      | Console.WriteLine($"{count} argument(s): {string.Join(" ", args)}");
+diagnostics: none

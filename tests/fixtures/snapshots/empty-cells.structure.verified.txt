@@ -1,0 +1,19 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+  [1] code id=empty
+      | 
+  [2] markdown id=nothing
+      | 
+  [3] code id=a
+      | var a = 1;
+  [4] code id=blank-lines
+      | 
+  [5] code id=b
+      | Console.WriteLine(a);
+diagnostics: none

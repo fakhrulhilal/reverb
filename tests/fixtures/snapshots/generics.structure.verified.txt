@@ -1,0 +1,22 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+  [1] code id=box
+      | var box = new Box<int>(41);
+  [2] code id=map
+      | static T Twice<T>(T value, Func<T, T, T> add) => add(value, value);
+      | var doubled = Twice(box.Value, (a, b) => a + b);
+      | var mapped = box.Map(v => v + 1);
+  [3] code id=show
+      | Console.WriteLine($"{doubled} {mapped.Value}");
+  [4] types
+      | record Box<T>(T Value)
+      | {
+      |     public Box<TOut> Map<TOut>(Func<T, TOut> f) => new(f(Value));
+      | }
+diagnostics: none

@@ -1,0 +1,15 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+  [1] code id=one
+      | Console.WriteLine(1 + 1);
+  [2] code id=two
+      | Console.WriteLine(string.Join(",", Enumerable.Range(1, 3)));
+  [3] code id=three
+      | Console.WriteLine(Math.Max(3, 7));
+diagnostics: none

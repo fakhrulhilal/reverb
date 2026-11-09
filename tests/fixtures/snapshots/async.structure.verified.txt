@@ -1,0 +1,20 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+  [1] code id=fetch
+      | static async Task<int> SlowSquare(int x)
+      | {
+      |     await Task.Delay(1);
+      |     return x * x;
+      | }
+      | var results = await Task.WhenAll(Enumerable.Range(1, 4).Select(SlowSquare));
+  [2] code id=sum
+      | var total = results.Sum();
+      | await Task.Yield();
+      | Console.WriteLine(total);
+diagnostics: none

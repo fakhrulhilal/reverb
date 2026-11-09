@@ -1,0 +1,19 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+  [1] code id=factor
+      | var factor = 3;
+  [2] code id=helpers
+      | static int Square(int x) => x * x;
+      | int Scale(int x) => x * factor;
+  [3] code id=use
+      | var squared = Square(4);
+      | var scaled = Scale(5);
+      | Func<int, int> squareIt = Square;
+      | Console.WriteLine($"{squared} {scaled} {squareIt(6)}");
+diagnostics: none
