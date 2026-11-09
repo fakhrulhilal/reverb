@@ -339,6 +339,36 @@ public class SessionTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task Every_widget_kind_takes_the_values_the_editor_sends()
+    {
+        await using var s = await Open([
+            """
+            var region = Ui.Dropdown("Region", [2, 0, 1], value: 0);
+            var query = Ui.Text("Search");
+            var all = Ui.Checkbox("All");
+            var rows = Ui.Number("Rows", 10, min: 1, max: 100);
+            var refresh = Ui.Button("Refresh");
+            """,
+            "var summary = $\"{region.Value}|{query.Value}|{all.Value}|{rows.Value}|{refresh.Value}\";",
+        ]);
+        Assert.Equal("0||False|10|0", s.Store.Get<string>("summary"));
+
+        // A dropdown gets an index: index 0 is the option 2, even though 0 is also an option.
+        Assert.True(await s.SetWidgetAsync("c1:0", 0));
+        Assert.True(await s.SetWidgetAsync("c1:1", "abc"));
+        Assert.True(await s.SetWidgetAsync("c1:2", true));
+        Assert.True(await s.SetWidgetAsync("c1:3", 42));
+        Assert.True(await s.SetWidgetAsync("c1:4", true));
+        Assert.True(await s.SetWidgetAsync("c1:4", true));
+        Assert.Equal("2|abc|True|42|2", s.Store.Get<string>("summary"));
+
+        Assert.False(await s.SetWidgetAsync("c1:0", 3));    // no fourth option
+        Assert.False(await s.SetWidgetAsync("c1:3", 500));  // above max
+        Assert.False(await s.SetWidgetAsync("c1:2", "yes")); // not a bool
+        Assert.Equal("2|abc|True|42|2", s.Store.Get<string>("summary"));
+    }
+
+    [Fact]
     public async Task Widget_value_survives_its_cell_rerunning_while_it_still_fits()
     {
         string[] cells = ["var size = Ui.Slider(\"Size\", min: 0, max: 10, value: 3);", "var doubled = size.Value * 2;"];

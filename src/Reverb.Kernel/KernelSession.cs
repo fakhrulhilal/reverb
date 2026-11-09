@@ -205,6 +205,8 @@ public sealed class KernelSession : IAsyncDisposable
     /// <summary>
     /// Sets a widget's value and re-runs the cells that read the variable holding it (not the
     /// cell that created it). Returns false if there's no such widget or the value doesn't fit.
+    /// This takes values as the editor sends them: a dropdown gets the index of the chosen
+    /// option, and a button gets <c>true</c> for a click (its count goes up by one).
     /// </summary>
     public async Task<bool> SetWidgetAsync(string widgetId, object? value)
     {
@@ -212,7 +214,14 @@ public sealed class KernelSession : IAsyncDisposable
         await gate.WaitAsync();
         try
         {
-            if (!widgets.TryGetValue(widgetId, out var w) || !w.Widget.TrySetValue(value)) return false;
+            if (!widgets.TryGetValue(widgetId, out var w)) return false;
+            var accepted = (w.Widget, value) switch
+            {
+                (IDropdown d, int index) => d.TrySelect(index),
+                (Button b, true) => b.TrySetValue(b.Value + 1),
+                _ => w.Widget.TrySetValue(value),
+            };
+            if (!accepted) return false;
             widgetState[widgetId] = (w.Widget.Kind, w.Widget.BoxedValue);
             RedrawWidget(w.Cell, w.Widget);
             if (Analysis is not null)

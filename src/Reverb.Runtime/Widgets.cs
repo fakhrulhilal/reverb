@@ -63,6 +63,9 @@ public interface IDropdown
 {
     IReadOnlyList<string> OptionTexts { get; }
     int SelectedIndex { get; }
+
+    /// <summary>Selects an option by position. Returns false if there's no such option.</summary>
+    bool TrySelect(int index);
 }
 
 /// <summary>Non-generic view of a number box, for hosts.</summary>
@@ -89,6 +92,13 @@ public sealed class Dropdown<T> : Widget, IDropdown
 
     IReadOnlyList<string> IDropdown.OptionTexts => [.. Options.Select(o => TextFormatter.Format(o))];
     int IDropdown.SelectedIndex => Options.ToList().IndexOf(Value);
+
+    bool IDropdown.TrySelect(int index)
+    {
+        if (index < 0 || index >= Options.Count) return false;
+        Value = Options[index];
+        return true;
+    }
     public override object? BoxedValue => Value;
 
     /// <summary>Accepts an option value or its index.</summary>
