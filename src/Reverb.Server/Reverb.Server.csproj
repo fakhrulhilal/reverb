@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The editor: a local web server, the browser protocol, file sync and the kernel process. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\Reverb.Kernel\Reverb.Kernel.csproj" />
+    <InternalsVisibleTo Include="Reverb.Server.Tests" />
+  </ItemGroup>
+
+  <!--
+    The frontend (../../frontend) is built with npm and embedded, so the tool works offline.
+    Set SkipFrontendBuild=true to use whatever is already in frontend/dist.
+  -->
+  <PropertyGroup>
+    <FrontendDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../frontend/'))</FrontendDir>
+    <FrontendDist>$(FrontendDir)dist/</FrontendDist>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrontendSource Include="$(FrontendDir)src/**/*;$(FrontendDir)index.html;$(FrontendDir)package.json;$(FrontendDir)package-lock.json;$(FrontendDir)vite.config.ts;$(FrontendDir)tsconfig.json" />
+  </ItemGroup>
+
+  <Target Name="BuildFrontend" BeforeTargets="BeforeBuild" Condition="'$(SkipFrontendBuild)' != 'true'" Inputs="@(FrontendSource)" Outputs="$(FrontendDist)index.html">
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(FrontendDir)" Condition="!Exists('$(FrontendDir)node_modules')" />
+    <Exec Command="npm run build" WorkingDirectory="$(FrontendDir)" />
+  </Target>
+
+  <Target Name="EmbedFrontend" AfterTargets="BuildFrontend" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(FrontendDist)index.html')" Text="The editor frontend isn't built. Install Node.js 20 or later and build again, or run 'npm ci &amp;&amp; npm run build' in frontend/." />
+    <ItemGroup>
+      <_FrontendFile Include="$(FrontendDist)**/*" />
+      <EmbeddedResource Include="@(_FrontendFile)" LogicalName="wwwroot/%(_FrontendFile.RecursiveDir)%(_FrontendFile.Filename)%(_FrontendFile.Extension)" />
+    </ItemGroup>
+  </Target>
+</Project>

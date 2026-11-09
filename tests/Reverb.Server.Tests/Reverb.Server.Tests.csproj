@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Reverb.Server\Reverb.Server.csproj" />
+    <!-- Built so the server can start real kernel processes through the CLI. -->
+    <ProjectReference Include="..\..\src\Reverb.Cli\Reverb.Cli.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

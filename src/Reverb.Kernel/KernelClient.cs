@@ -55,6 +55,8 @@ public sealed class KernelClient : IAsyncDisposable
 
     public bool HasExited => process.HasExited;
 
+    public int ProcessId => process.Id;
+
     public string StandardError
     {
         get { lock (stderr) return stderr.ToString(); }
@@ -287,6 +289,15 @@ public static class FileBasedAppRuntime
         var basePath = Path.ChangeExtension(entryAssembly, ".runtimeconfig.json");
         var root = JsonNode.Parse(File.ReadAllText(basePath))!.AsObject();
         var options = root["runtimeOptions"]!.AsObject();
+        // The entry assembly may also need ASP.NET Core (the editor server does). A file-based app
+        // only gets the base framework, so the kernel does too.
+        if (options["frameworks"] is JsonArray frameworks)
+        {
+            var core = frameworks.FirstOrDefault(f => (string?)f?["name"] == "Microsoft.NETCore.App")
+                ?? throw new InvalidOperationException($"{basePath} doesn't list Microsoft.NETCore.App.");
+            options.Remove("frameworks");
+            options["framework"] = core.DeepClone();
+        }
         if (options["configProperties"] is not JsonObject props)
         {
             props = new JsonObject();
