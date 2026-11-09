@@ -80,7 +80,10 @@ public static class KernelServer
             }
             // Work requests pre-empt the running cell now, not when the queue gets to them.
             if (request.Type is RequestTypes.Open or RequestTypes.Update or RequestTypes.Run or RequestTypes.RunAll or RequestTypes.SetWidget)
+            {
+                Warmup.Stop();
                 session.CancelForNewWork();
+            }
             await queue.Writer.WriteAsync(request);
             if (request.Type == RequestTypes.Shutdown) break;
         }
@@ -230,6 +233,8 @@ public static class KernelServer
 /// </summary>
 static class Warmup
 {
+    static readonly CancellationTokenSource stop = new();
+
     public static void Start() => _ = Task.Run(async () =>
     {
         try
@@ -237,12 +242,18 @@ static class Warmup
             await using var session = new KernelSession();
             var text = "#:package Reverb.Runtime@0.1.0\n// reverb-notebook v1\n\n// %% setup\nusing Reverb;\n\n// %% id=a\nvar a = 1;\n\n// %% id=b\nvar b = a + 1;\n";
             var doc = NotebookDocument.Parse(text);
+            if (stop.IsCancellationRequested) return;
             await session.OpenAsync(doc);
-            for (var i = 2; i < 12; i++) await session.UpdateAsync(doc.WithCellSource("a", $"var a = {i};"));
+            for (var i = 2; i < 12 && !stop.IsCancellationRequested; i++)
+                await session.UpdateAsync(doc.WithCellSource("a", $"var a = {i};"));
+            KernelTrace.Mark("warm-up done");
         }
         catch (Exception)
         {
             // Warm-up is best effort.
         }
     });
+
+    /// <summary>Real work has arrived: finish the step in progress and stop.</summary>
+    public static void Stop() => stop.Cancel();
 }

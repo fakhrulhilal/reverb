@@ -36,6 +36,12 @@ public sealed class CellCompiler : IDisposable
         public required Func<CellContext, Task> Run { get; init; }
     }
 
+    /// <summary>
+    /// One compile-and-load at a time per process. Two at once (the warm-up session and the first
+    /// real run) occasionally hung forever on Windows; nothing gains from running them together.
+    /// </summary>
+    static readonly Lock compileGate = new();
+
     readonly Dictionary<string, Compiled> cells = new(StringComparer.Ordinal);
     readonly ImmutableArray<MetadataReference> references;
     CSharpCompilation? baseCompilation;
@@ -71,17 +77,20 @@ public sealed class CellCompiler : IDisposable
         TypesVersion = hash;
         if (generated.Code is null) return generated.Blockers.IsEmpty;
 
-        var (pe, pdb, errors) = Emit(analysis, CellCodeGenerator.TypesAssemblyName, source, references);
-        if (pe is null)
+        lock (compileGate)
         {
-            failure = new CompileFailure("types", errors);
-            return false;
+            var (pe, pdb, errors) = Emit(analysis, CellCodeGenerator.TypesAssemblyName, source, references);
+            if (pe is null)
+            {
+                failure = new CompileFailure("types", errors);
+                return false;
+            }
+            CompileCount++;
+            typesReference = MetadataReference.CreateFromImage(pe);
+            typesContext = new CellLoadContext("reverb:types", _ => null);
+            typesAssembly = typesContext.LoadFromStream(new MemoryStream(pe), new MemoryStream(pdb!));
+            return true;
         }
-        CompileCount++;
-        typesReference = MetadataReference.CreateFromImage(pe);
-        typesContext = new CellLoadContext("reverb:types", _ => null);
-        typesAssembly = typesContext.LoadFromStream(new MemoryStream(pe), new MemoryStream(pdb!));
-        return true;
     }
 
     /// <summary>The cell's entry point, compiling it first if its generated code changed.</summary>
@@ -97,19 +106,24 @@ public sealed class CellCompiler : IDisposable
         }
 
         var refs = typesReference is null ? references : references.Add(typesReference);
-        var (pe, pdb, errors) = Emit(analysis, CellCodeGenerator.CellsAssemblyName, code.Source, refs);
-        if (pe is null)
+        CellLoadContext context;
+        Assembly assembly;
+        lock (compileGate)
         {
-            failure = new CompileFailure(code.CellKey, errors);
-            return null;
-        }
-        CompileCount++;
+            var (pe, pdb, errors) = Emit(analysis, CellCodeGenerator.CellsAssemblyName, code.Source, refs);
+            if (pe is null)
+            {
+                failure = new CompileFailure(code.CellKey, errors);
+                return null;
+            }
+            CompileCount++;
 
-        // Read the field, don't capture the assembly: a captured reference would keep old types
-        // contexts alive. A cell compiled against an older types assembly is recompiled before it runs.
-        var context = new CellLoadContext($"reverb:cell:{code.CellKey}",
-            name => name.Name == CellCodeGenerator.TypesAssemblyName ? typesAssembly : null);
-        var assembly = context.LoadFromStream(new MemoryStream(pe), new MemoryStream(pdb!));
+            // Read the field, don't capture the assembly: a captured reference would keep old types
+            // contexts alive. A cell compiled against an older types assembly is recompiled before it runs.
+            context = new CellLoadContext($"reverb:cell:{code.CellKey}",
+                name => name.Name == CellCodeGenerator.TypesAssemblyName ? typesAssembly : null);
+            assembly = context.LoadFromStream(new MemoryStream(pe), new MemoryStream(pdb!));
+        }
         var method = assembly.GetType(code.ClassName, throwOnError: true)!.GetMethod("RunAsync", BindingFlags.Public | BindingFlags.Static)!;
         var run = method.CreateDelegate<Func<CellContext, Task>>();
         cells[code.CellKey] = new Compiled { Hash = hash, Context = context, Run = run };
@@ -150,7 +164,8 @@ public sealed class CellCompiler : IDisposable
             baseCompilation = CSharpCompilation.Create(assemblyName,
                 [CSharpSyntaxTree.ParseText(options.GlobalUsingsSource, options.ParseOptions, "GlobalUsings.g.cs", Encoding.UTF8)],
                 refs,
-                options.CompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+                // Cells are small; a parallel build only adds thread-pool waits.
+                options.CompilationOptions(OutputKind.DynamicallyLinkedLibrary).WithConcurrentBuild(false));
             baseKey = key;
         }
         var compilation = baseCompilation.AddSyntaxTrees(
