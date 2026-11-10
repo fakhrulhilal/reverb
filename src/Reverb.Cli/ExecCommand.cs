@@ -119,6 +119,8 @@ static class ExecCommand
                 failed = true;
             }
             client.Event -= OnEvent;
+            // With tracing on, show how the kernel spent its time.
+            if (Environment.GetEnvironmentVariable("REVERB_KERNEL_TRACE") is { Length: > 0 }) Console.Error.Write(client.StandardError);
         }
         stdout.Flush();
 

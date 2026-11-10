@@ -110,7 +110,9 @@ public sealed class CellCompiler : IDisposable
         Assembly assembly;
         lock (compileGate)
         {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
             var (pe, pdb, errors) = Emit(analysis, CellCodeGenerator.CellsAssemblyName, code.Source, refs);
+            KernelTrace.Mark($"{code.CellKey}: emitted in {clock.ElapsedMilliseconds} ms");
             if (pe is null)
             {
                 failure = new CompileFailure(code.CellKey, errors);
@@ -122,7 +124,9 @@ public sealed class CellCompiler : IDisposable
             // contexts alive. A cell compiled against an older types assembly is recompiled before it runs.
             context = new CellLoadContext($"reverb:cell:{code.CellKey}",
                 name => name.Name == CellCodeGenerator.TypesAssemblyName ? typesAssembly : null);
+            clock.Restart();
             assembly = context.LoadFromStream(new MemoryStream(pe), new MemoryStream(pdb!));
+            KernelTrace.Mark($"{code.CellKey}: loaded in {clock.ElapsedMilliseconds} ms");
         }
         var method = assembly.GetType(code.ClassName, throwOnError: true)!.GetMethod("RunAsync", BindingFlags.Public | BindingFlags.Static)!;
         var run = method.CreateDelegate<Func<CellContext, Task>>();
