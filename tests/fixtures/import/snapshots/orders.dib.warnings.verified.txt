@@ -1,0 +1,2 @@
+cell 4: F# isn't supported, so the cell was kept as a Markdown note. Rewrite it in C# or delete it.
+cell 5: the magic command #!time has no Reverb equivalent and was commented out.

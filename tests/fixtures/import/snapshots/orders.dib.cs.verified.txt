@@ -1,0 +1,29 @@
+#!/usr/bin/env dotnet
+#:package Reverb.Runtime@0.1.0
+#:package Humanizer@2.14.1
+// reverb-notebook v1
+
+// %% setup
+using Reverb;
+using static Reverb.Notebook;
+using Humanizer;
+
+// %% [markdown] id=frpecb
+// # Orders
+//
+// A notebook from .NET Interactive.
+
+// %% id=ox6chu
+var orders = new[] { 10.0, 20.5 };
+orders.Length.Dump();
+
+// %% [markdown] id=bh46sr
+// *This F# cell from the original notebook wasn't converted: Reverb notebooks are C# only.*
+//
+// ```fsharp
+// let x = 1 + 1
+// ```
+
+// %% id=lysc3o
+// #!time
+Console.WriteLine("total_sales".Humanize());

@@ -1,0 +1,3 @@
+cell 5: F# isn't supported, so the cell was kept as a Markdown note. Rewrite it in C# or delete it.
+cell 6: the magic command #!time has no Reverb equivalent and was commented out.
+'orders' is declared in cells 3 and 6. A notebook is one program, so each name can be declared once: rename the later ones.

@@ -1,0 +1,28 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"name":"csharp"},{"aliases":[],"name":"fsharp"}]}}
+
+#!markdown
+
+# Orders
+
+A notebook from .NET Interactive.
+
+#!csharp
+
+#r "nuget: Humanizer, 2.14.1"
+using Humanizer;
+
+#!csharp
+
+var orders = new[] { 10.0, 20.5 };
+orders.Length
+
+#!fsharp
+
+let x = 1 + 1
+
+#!csharp
+
+#!time
+Console.WriteLine("total_sales".Humanize());
