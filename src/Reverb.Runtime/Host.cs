@@ -77,4 +77,11 @@ public static class Notebook
     /// <c>await Task.Delay(5000, Notebook.CancellationToken)</c>, so interrupting works.
     /// </summary>
     public static CancellationToken CancellationToken => ReverbHost.Effective.CancellationToken;
+
+    /// <summary>
+    /// The folder the notebook file is in, for data files that sit next to it:
+    /// <c>File.ReadAllLines(Path.Combine(Notebook.Folder, "data.csv"))</c>. <c>dotnet run</c> and the
+    /// kernel both say where the file is; failing that, it's the current directory.
+    /// </summary>
+    public static string Folder => AppContext.GetData("EntryPointFileDirectoryPath") as string is { Length: > 0 } dir ? dir : Environment.CurrentDirectory;
 }

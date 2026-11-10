@@ -1,0 +1,12 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+  [1] code id=folder
+      | // The notebook's own folder, whatever the current directory is.
+      | Console.WriteLine(File.Exists(Path.Combine(Notebook.Folder, "folder.cs")));
+diagnostics: none
