@@ -35,6 +35,12 @@ public static class RequestTypes
     /// <summary>Analyse a version of the notebook without running it. Answered even while a cell runs.</summary>
     public const string Analyze = "analyze";
     public const string Interrupt = "interrupt";
+
+    // Language services. Answered on their own worker, even while a cell runs; the answer is in the done event.
+    public const string Complete = "complete";
+    public const string Hover = "hover";
+    public const string SignatureHelp = "signatureHelp";
+    public const string CodeFix = "codeFix";
     public const string Shutdown = "shutdown";
 }
 
@@ -69,6 +75,14 @@ public sealed class KernelRequest
 
     /// <summary>The caller's version number for <see cref="Text"/>, echoed back in the answer.</summary>
     public int? Version { get; set; }
+
+    /// <summary>For language requests: a position in <see cref="Cell"/>'s source.</summary>
+    public int? Offset { get; set; }
+
+    /// <summary>For codeFix: which diagnostic, by id and where it starts in the cell.</summary>
+    public string? DiagnosticId { get; set; }
+    public int? Line { get; set; }
+    public int? Column { get; set; }
 }
 
 public sealed class KernelEvent
@@ -87,6 +101,33 @@ public sealed class KernelEvent
     public List<DiagnosticData>? Diagnostics { get; set; }
     public List<EdgeData>? Graph { get; set; }
     public int? Version { get; set; }
+
+    // Answers to language requests, in their done event. From/To are offsets in the cell's source.
+    public int? From { get; set; }
+    public int? To { get; set; }
+    public List<CompletionData>? Completions { get; set; }
+    public List<SignatureData>? Signatures { get; set; }
+    public int? ActiveSignature { get; set; }
+    public int? ActiveParameter { get; set; }
+}
+
+public sealed class CompletionData
+{
+    public string Label { get; set; } = "";
+
+    /// <summary>Text to insert when it differs from the label (e.g. a generic method's label has &lt;&gt;).</summary>
+    public string? Insert { get; set; }
+
+    /// <summary>variable, method, property, field, class, struct, interface, enum, namespace, keyword, ...</summary>
+    public string Kind { get; set; } = "";
+    public string? Detail { get; set; }
+    public string SortText { get; set; } = "";
+}
+
+public sealed class SignatureData
+{
+    public string Label { get; set; } = "";
+    public List<string> Parameters { get; set; } = [];
 }
 
 /// <summary>Cell <see cref="From"/> uses the names in <see cref="Via"/> from cell <see cref="To"/>.</summary>
@@ -125,6 +166,9 @@ public sealed class DiagnosticData
     public int StartColumn { get; set; }
     public int EndLine { get; set; }
     public int EndColumn { get; set; }
+
+    /// <summary>What Reverb's fix for this diagnostic does, when it has one ("Move to the setup cell").</summary>
+    public string? Fix { get; set; }
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]

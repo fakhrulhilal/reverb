@@ -6,6 +6,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Reverb.Analysis\Reverb.Analysis.csproj" />
     <ProjectReference Include="..\Reverb.Runtime\Reverb.Runtime.csproj" />
+    <!-- Completions and hover (CompletionService, QuickInfoService). Same version as the compiler. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" Version="$(RoslynVersion)" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Reverb.Kernel.Tests" />

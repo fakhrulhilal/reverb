@@ -47,6 +47,10 @@ public static class KernelServer
         var analyses = Channel.CreateUnbounded<KernelRequest>(new UnboundedChannelOptions { SingleReader = true });
         var analyzer = Task.Run(() => AnalyzeLoopAsync(analyses.Reader, session.References, events));
 
+        // Completions and the like too, and separately from analysis so a slow one doesn't hold up diagnostics.
+        var language = Channel.CreateUnbounded<KernelRequest>(new UnboundedChannelOptions { SingleReader = true });
+        var languageWorker = Task.Run(() => LanguageLoopAsync(language.Reader, session.References, events));
+
         Warmup.Start();
         KernelTrace.Mark("sending ready");
         events.Send(new KernelEvent { Type = EventTypes.Ready });
@@ -72,6 +76,11 @@ public static class KernelServer
                 await analyses.Writer.WriteAsync(request);
                 continue;
             }
+            if (request.Type is RequestTypes.Complete or RequestTypes.Hover or RequestTypes.SignatureHelp or RequestTypes.CodeFix)
+            {
+                await language.Writer.WriteAsync(request);
+                continue;
+            }
             if (request.Type == RequestTypes.Interrupt)
             {
                 session.Interrupt();
@@ -90,8 +99,10 @@ public static class KernelServer
 
         queue.Writer.TryComplete();
         analyses.Writer.TryComplete();
+        language.Writer.TryComplete();
         await processor;
         await analyzer;
+        await languageWorker;
         await session.DisposeAsync();
         return 0;
     }
@@ -150,7 +161,7 @@ public static class KernelServer
                     Type = EventTypes.Analysis,
                     RequestId = request.Id,
                     Version = request.Version,
-                    Diagnostics = [.. last.Diagnostics.Select(ToData)],
+                    Diagnostics = [.. last.Diagnostics.Select(d => ToData(d, last))],
                     Graph = [.. last.Graph.Edges.Select(e => new EdgeData { From = e.From, To = e.To, Via = [.. e.Via] })],
                 });
                 events.Send(new KernelEvent { Type = EventTypes.Done, RequestId = request.Id, Ok = true });
@@ -160,6 +171,73 @@ public static class KernelServer
                 last = null;
                 events.Send(new KernelEvent { Type = EventTypes.Error, Message = e.ToString() });
                 events.Send(new KernelEvent { Type = EventTypes.Done, RequestId = request.Id, Ok = false, Message = $"{e.GetType().Name}: {e.Message}" });
+            }
+        }
+    }
+
+    /// <summary>
+    /// Answers completion, hover, signature help and code fix requests, in order. A request that's
+    /// been overtaken by a newer one of the same kind (the user kept typing) gets an empty answer.
+    /// </summary>
+    static async Task LanguageLoopAsync(ChannelReader<KernelRequest> reader, ReferenceSet references, ProtocolEvents events)
+    {
+        using var service = new LanguageService(references);
+        NotebookAnalysis? analysis = null;
+        while (await reader.WaitToReadAsync())
+        {
+            var batch = new List<KernelRequest>();
+            while (reader.TryRead(out var r)) batch.Add(r);
+            foreach (var request in batch)
+            {
+                var done = new KernelEvent { Type = EventTypes.Done, RequestId = request.Id, Ok = true };
+                if (request.Type != RequestTypes.CodeFix && batch.Any(b => b.Type == request.Type && b.Id > request.Id))
+                {
+                    events.Send(done);
+                    continue;
+                }
+                try
+                {
+                    var doc = NotebookDocument.Parse(request.Text ?? "");
+                    var cell = request.Cell ?? "";
+                    var offset = request.Offset ?? 0;
+                    switch (request.Type)
+                    {
+                        case RequestTypes.Complete:
+                            var completions = await service.CompleteAsync(doc, cell, offset);
+                            (done.From, done.To, done.Completions) = (completions.From, completions.To, [.. completions.Items]);
+                            break;
+                        case RequestTypes.Hover:
+                            if (await service.HoverAsync(doc, cell, offset) is { } hover)
+                                (done.From, done.To, done.Text) = (hover.From, hover.To, hover.Text);
+                            break;
+                        case RequestTypes.SignatureHelp:
+                            if (await service.SignatureHelpAsync(doc, cell, offset) is { } help)
+                                (done.Signatures, done.ActiveSignature, done.ActiveParameter) = ([.. help.Signatures], help.ActiveSignature, help.ActiveParameter);
+                            break;
+                        case RequestTypes.CodeFix:
+                            analysis = analysis is null ? NotebookAnalysis.Create(doc, references) : analysis.Update(doc);
+                            var diagnostic = analysis.Diagnostics.FirstOrDefault(d =>
+                                d.CellKey == cell && d.Id == request.DiagnosticId && d.Range.StartLine == request.Line && d.Range.StartColumn == request.Column);
+                            if (diagnostic is null)
+                            {
+                                (done.Ok, done.Message) = (false, "That problem isn't there any more, so there's nothing to fix.");
+                                break;
+                            }
+                            done.Text = NotebookCodeFixes.Apply(analysis, diagnostic).Serialize();
+                            break;
+                    }
+                }
+                catch (CodeFixException e)
+                {
+                    (done.Ok, done.Message) = (false, e.Message);
+                }
+                catch (Exception e)
+                {
+                    analysis = null;
+                    events.Send(new KernelEvent { Type = EventTypes.Error, Message = e.ToString() });
+                    (done.Ok, done.Message) = (false, $"{e.GetType().Name}: {e.Message}");
+                }
+                events.Send(done);
             }
         }
     }
@@ -199,7 +277,7 @@ public static class KernelServer
             Send(new KernelEvent { Type = EventTypes.Outputs, Cell = cell, Outputs = [.. outputs.Select(OutputData.From)] });
 
         public void Diagnostics(NotebookAnalysis analysis) =>
-            Send(new KernelEvent { Type = EventTypes.Diagnostics, Diagnostics = [.. analysis.Diagnostics.Select(ToData)] });
+            Send(new KernelEvent { Type = EventTypes.Diagnostics, Diagnostics = [.. analysis.Diagnostics.Select(d => ToData(d, analysis))] });
     }
 
     public static string StatusName(CellStatus status) => status switch
@@ -214,8 +292,10 @@ public static class KernelServer
         _ => status.ToString().ToLowerInvariant(),
     };
 
-    public static DiagnosticData ToData(NotebookDiagnostic d) => new()
+    /// <summary>The diagnostic as sent to clients. With the analysis, it also says what Reverb's fix would do.</summary>
+    public static DiagnosticData ToData(NotebookDiagnostic d, NotebookAnalysis? analysis = null) => new()
     {
+        Fix = analysis is null ? null : NotebookCodeFixes.Title(analysis, d),
         Id = d.Id,
         Severity = d.Severity.ToString().ToLowerInvariant(),
         Message = d.Message,
@@ -246,6 +326,12 @@ static class Warmup
             await session.OpenAsync(doc);
             for (var i = 2; i < 12 && !stop.IsCancellationRequested; i++)
                 await session.UpdateAsync(doc.WithCellSource("a", $"var a = {i};"));
+            // Roslyn's completion machinery takes a moment to put together the first time.
+            if (!stop.IsCancellationRequested)
+            {
+                using var language = new LanguageService(session.References);
+                await language.CompleteAsync(doc.WithCellSource("b", "var b = a."), "b", 10);
+            }
             KernelTrace.Mark("warm-up done");
         }
         catch (Exception)
