@@ -4,9 +4,9 @@ import { mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const repo = resolve(import.meta.dirname, "..", "..", "..");
+export const repo = resolve(import.meta.dirname, "..", "..", "..");
 const configuration = process.env.REVERB_CONFIGURATION ?? "Debug";
-const cli = process.env.REVERB_CLI ?? join(repo, "src", "Reverb.Cli", "bin", configuration, "net10.0", "Reverb.Cli.dll");
+export const cli = process.env.REVERB_CLI ?? join(repo, "src", "Reverb.Cli", "bin", configuration, "net10.0", "Reverb.Cli.dll");
 
 export interface Reverb {
   /** The editor's address, token included. */

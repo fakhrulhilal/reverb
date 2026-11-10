@@ -68,7 +68,9 @@ sales("run")("app mode shows outputs and widgets, hides code and can't be edited
   await expect(page.getByRole("heading", { name: "Sales explorer" })).toBeVisible();
   await expect(page.locator("table.output-table")).toBeVisible();
   await expect(page.locator(".cm-editor")).toHaveCount(0);
-  await expect(page.getByRole("button")).toHaveCount(0);
+  // Nothing that edits or runs: the only button is the light/dark switch.
+  await expect(page.getByRole("button")).toHaveCount(1);
+  await expect(page.getByRole("button")).toHaveText(/^Theme:/);
   const html = await page.content();
   expect(html).not.toContain("Enumerable.Range");
   expect(html).not.toContain("record Order");
