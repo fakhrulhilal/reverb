@@ -1,4 +1,6 @@
-import type { CellAttrs, CellView, ClientMessage, Diagnostic, Edge, KernelState, Output, ServerMessage, WidgetKind } from "./protocol";
+import type { CellAttrs, CellView, ClientMessage, Diagnostic, Edge, KernelState, LangRequest, Output, Package, ServerMessage, WidgetKind } from "./protocol";
+
+type LangResult = Extract<ServerMessage, { requestId: number }>;
 
 export interface Cell extends CellView {
   /** When the cell started running, for the elapsed-time badge (local clock). */
@@ -21,7 +23,7 @@ export interface NotebookState {
   kernel: { state: KernelState; message?: string };
   cells: Cell[];
   edges: Edge[];
-  packages: { name: string; version?: string }[];
+  packages: Package[];
   notebookDiagnostics: Diagnostic[];
   saved: "saved" | "unsaved";
   toasts: Toast[];
@@ -65,7 +67,8 @@ export class NotebookStore {
   private socket: WebSocket | null = null;
   private seq = 0;
   /** Local edits the server hasn't confirmed: the source, and the seq it was sent with (0 = not sent yet). */
-  private pending = new Map<string, { source: string; seq: number }>();
+  // `ran`: the edit was run too, so the cell isn't "edited" even if a snapshot from before the run says so.
+  private pending = new Map<string, { source: string; seq: number; ran?: boolean }>();
   private timers = new Map<string, number>();
   /** The seq of the last add/delete/move this tab sent. Snapshots older than it don't know about it yet. */
   private structuralSeq = 0;
@@ -122,6 +125,35 @@ export class NotebookStore {
     this.socket?.close();
   }
 
+  private nextRequest = 0;
+  private answers = new Map<number, (m: LangResult | null) => void>();
+
+  /**
+   * Asks the kernel about the code in a cell: completions, hover or signature help. Sends the
+   * cell's text as this tab has it, so the answer fits what's on screen. Resolves to null when
+   * there's no answer (no kernel, or it took too long).
+   */
+  ask(type: LangRequest, cellId: string, source: string, offset: number): Promise<LangResult | null> {
+    const requestId = ++this.nextRequest;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.answers.delete(requestId);
+        resolve(null);
+      }, 10_000);
+      this.answers.set(requestId, (m) => {
+        clearTimeout(timer);
+        resolve(m);
+      });
+      this.send({ type, requestId, cellId, source, offset });
+    });
+  }
+
+  /** Applies Reverb's fix for a diagnostic. The notebook updates when the server has made it. */
+  codeFix(cellId: string, d: Diagnostic) {
+    this.flush();
+    this.send({ type: "lang.codeFix", cellId, diagnosticId: d.id, line: d.startLine, column: d.startColumn });
+  }
+
   private send(message: ClientMessage): number {
     const seq = ++this.seq;
     if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ ...message, seq }));
@@ -170,6 +202,14 @@ export class NotebookStore {
       case "error":
         this.toast("error", m.message);
         break;
+      case "lang.completionsResult":
+      case "lang.hoverResult":
+      case "lang.signatureHelpResult": {
+        const answer = this.answers.get(m.requestId);
+        this.answers.delete(m.requestId);
+        answer?.(m);
+        break;
+      }
     }
   }
 
@@ -188,7 +228,7 @@ export class NotebookStore {
       return {
         ...c,
         source,
-        edited: local && isCode(c.kind) ? true : c.edited,
+        edited: local && isCode(c.kind) ? !local.ran : c.edited,
         runningSince: c.status === "running" ? (old?.runningSince ?? Date.now()) : undefined,
       };
     });
@@ -251,12 +291,15 @@ export class NotebookStore {
 
   run(cellId: string) {
     this.flush();
+    const p = this.pending.get(cellId);
+    if (p) p.ran = true;
     this.send({ type: "cell.run", cellId });
     this.updateCell(cellId, (c) => ({ ...c, edited: false }));
   }
 
   runAll() {
     this.flush();
+    for (const p of this.pending.values()) p.ran = true;
     this.send({ type: "notebook.runAll" });
     this.set({ cells: this.state.cells.map((c) => ({ ...c, edited: false })) });
   }
@@ -279,6 +322,13 @@ export class NotebookStore {
   restart() {
     this.send({ type: "kernel.restart" });
     this.set({ kernel: { state: "starting" } });
+  }
+
+  /** Replaces the notebook's packages. The server rewrites the #:package lines and rebuilds the kernel. */
+  setPackages(packages: Package[]) {
+    this.flush();
+    this.send({ type: "packages.set", packages });
+    this.set({ packages });
   }
 
   /** Adds a cell after `afterCellId` (null: at the top) and focuses it. Returns its id. */

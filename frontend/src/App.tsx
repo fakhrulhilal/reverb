@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { flushSync } from "react-dom";
 import { CellView, type Dependencies } from "./Cell";
 import type { EditorKeys } from "./CodeEditor";
+import { PackagesPanel } from "./Packages";
 import type { NotebookStore } from "./store";
 
 const isMac = navigator.platform.toUpperCase().includes("MAC");
@@ -10,6 +11,7 @@ const mod = (e: KeyboardEvent) => (isMac ? e.metaKey : e.ctrlKey);
 export function App({ store }: { store: NotebookStore }) {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [selected, setSelected] = useState<string | null>(null);
+  const [showPackages, setShowPackages] = useState(false);
   const mode = useRef<"edit" | "command">("command");
   const lastD = useRef(0);
 
@@ -195,6 +197,9 @@ export function App({ store }: { store: NotebookStore }) {
           <span className="status-dot" aria-hidden="true" />
           kernel {kernel.state}
         </span>
+        <button onClick={() => setShowPackages((s) => !s)} aria-expanded={showPackages} title="NuGet packages this notebook uses">
+          Packages{state.packages.length > 0 ? ` (${state.packages.length})` : ""}
+        </button>
         <label className="lazy" title="Lazy: edits mark dependent cells stale instead of running them">
           <input type="checkbox" checked={state.lazy} onChange={(e) => store.setLazy(e.target.checked)} />
           lazy
@@ -213,6 +218,17 @@ export function App({ store }: { store: NotebookStore }) {
       {state.connection !== "open" && state.loaded && (
         <div className="banner warning" role="status">
           Lost the connection to the Reverb server. Trying to reconnect… (Is <code>reverb edit</code> still running?)
+        </div>
+      )}
+      {showPackages && <PackagesPanel packages={state.packages} store={store} onClose={() => setShowPackages(false)} />}
+      {kernel.state === "building" && (
+        <div className="banner warning" role="status" data-testid="kernel-building">
+          {kernel.message ?? "Getting packages…"} The first time a set of packages is used this takes a little while; after that the kernel is reused.
+        </div>
+      )}
+      {kernel.state === "dead" && kernel.message && (
+        <div className="banner error" role="status" data-testid="kernel-dead">
+          <pre>{kernel.message}</pre>
         </div>
       )}
       {state.notebookDiagnostics.length > 0 && (

@@ -4,7 +4,13 @@ export type CellKind = "code" | "markdown" | "setup" | "types";
 
 export type CellStatus = "idle" | "queued" | "running" | "stale" | "error" | "upstream-error" | "disabled";
 
-export type KernelState = "starting" | "ready" | "busy" | "dead";
+/** "building" means getting the notebook's packages and building a kernel with them. */
+export type KernelState = "building" | "starting" | "ready" | "busy" | "dead";
+
+export interface Package {
+  name: string;
+  version?: string;
+}
 
 export interface CellAttrs {
   hide_code?: boolean;
@@ -30,7 +36,25 @@ export interface Diagnostic {
   startColumn: number;
   endLine: number;
   endColumn: number;
+  /** What Reverb's fix does, when it has one. */
+  fix?: string;
 }
+
+export interface Completion {
+  label: string;
+  /** Text to insert when it isn't the label. */
+  insert?: string;
+  kind: string;
+  detail?: string;
+  sortText: string;
+}
+
+export interface Signature {
+  label: string;
+  parameters: string[];
+}
+
+export type LangRequest = "lang.completions" | "lang.hover" | "lang.signatureHelp";
 
 /** Cell `from` uses the names in `via` from cell `to`. */
 export interface Edge {
@@ -64,7 +88,7 @@ export type ServerMessage =
       name: string;
       lazy: boolean;
       cells: CellView[];
-      packages: { name: string; version?: string }[];
+      packages: Package[];
       kernel: { state: KernelState; message?: string };
       notebookDiagnostics: Diagnostic[];
       edges: Edge[];
@@ -77,7 +101,16 @@ export type ServerMessage =
   | { type: "kernel.status"; state: KernelState; message?: string }
   | { type: "file.saved"; notebookVersion: number; ack: number }
   | { type: "file.externalChange"; notebookVersion: number; message: string }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "lang.completionsResult"; requestId: number; from?: number; to?: number; completions?: Completion[] }
+  | { type: "lang.hoverResult"; requestId: number; from?: number; to?: number; text?: string }
+  | {
+      type: "lang.signatureHelpResult";
+      requestId: number;
+      signatures?: Signature[];
+      activeSignature?: number;
+      activeParameter?: number;
+    };
 
 export type ClientMessage =
   | { type: "cell.update"; cellId: string; source: string }
@@ -91,7 +124,10 @@ export type ClientMessage =
   | { type: "cell.setAttrs"; cellId: string; attrs: CellAttrs }
   | { type: "widget.setValue"; widgetId: string; value: unknown; kind: WidgetKind }
   | { type: "kernel.interrupt" }
-  | { type: "kernel.restart" };
+  | { type: "kernel.restart" }
+  | { type: "packages.set"; packages: Package[] }
+  | { type: LangRequest; requestId: number; cellId: string; source: string; offset: number }
+  | { type: "lang.codeFix"; cellId: string; diagnosticId: string; line: number; column: number };
 
 export const MIME = {
   plain: "text/plain",

@@ -1,13 +1,14 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { EditorState, Compartment, type Extension } from "@codemirror/state";
+import { EditorState, Compartment, Prec, type Extension } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, drawSelection, highlightActiveLine, placeholder as placeholderExt } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { StreamLanguage, bracketMatching, indentOnInput, syntaxHighlighting, HighlightStyle } from "@codemirror/language";
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { closeBrackets, closeBracketsKeymap, closeCompletion, completionStatus, currentCompletions } from "@codemirror/autocomplete";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { lintGutter, setDiagnostics, type Diagnostic as CmDiagnostic } from "@codemirror/lint";
 import { csharp } from "@codemirror/legacy-modes/mode/clike";
 import { tags } from "@lezer/highlight";
+import { closeSignatureHelp, languageServices, type Ask } from "./language";
 import type { Diagnostic } from "./protocol";
 
 export interface EditorKeys {
@@ -31,6 +32,8 @@ interface Props {
   focus?: { at: "start" | "end"; serial: number } | null;
   placeholder?: string;
   label: string;
+  /** Completions, hover and signature help for C# cells. */
+  ask?: Ask;
 }
 
 // Colours come from CSS variables, so the editor follows the light and dark themes.
@@ -104,6 +107,25 @@ export function CodeEditor(props: Props) {
       EditorView.contentAttributes.of({ "aria-label": props.label }),
       placeholderExt(props.placeholder ?? ""),
       languageSlot.current.of(props.language === "csharp" ? StreamLanguage.define(csharp) : []),
+      // Escape closes what's showing (signature help, then the completion list) and otherwise
+      // leaves the editor. Completion state with nothing on screen (a request still on its way,
+      // or an empty list) mustn't swallow it. Listed before the completion extension, whose own
+      // Escape binding has the same precedence and would otherwise run first.
+      Prec.highest(
+        keymap.of([
+          {
+            key: "Escape",
+            run: (v) => {
+              if (closeSignatureHelp(v)) return true;
+              if (completionStatus(v.state) === "active" && currentCompletions(v.state).length > 0) return false;
+              closeCompletion(v);
+              k().escape();
+              return true;
+            },
+          },
+        ]),
+      ),
+      props.language === "csharp" ? languageServices(() => latest.current.ask) : [],
       keymap.of([
         { key: "Mod-Enter", run: () => (k().run(), true), preventDefault: true },
         { key: "Shift-Enter", run: () => (k().runAndNext(), true), preventDefault: true },

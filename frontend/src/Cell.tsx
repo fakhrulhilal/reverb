@@ -187,6 +187,7 @@ function CellComponent(props: Props) {
           keys={isMarkdown ? markdownKeys : keys}
           focus={focus}
           label={`Code for cell ${title}`}
+          ask={isMarkdown ? undefined : (type, source, offset) => store.ask(type, cell.id, source, offset)}
           placeholder={isMarkdown ? "Markdown" : cell.kind === "setup" ? "using directives" : "C# code"}
         />
       ) : (
@@ -200,6 +201,11 @@ function CellComponent(props: Props) {
           {errors.map((d, i) => (
             <li key={i} className={d.severity}>
               <span className="where">line {d.startLine + 1}</span> {d.id}: {d.message}
+              {d.fix && (
+                <button className="fix" onClick={() => store.codeFix(cell.id, d)}>
+                  {d.fix}
+                </button>
+              )}
             </li>
           ))}
         </ul>
