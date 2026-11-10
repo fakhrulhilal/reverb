@@ -3,4 +3,24 @@
   <PropertyGroup>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
+
+  <!--
+    Package settings for the projects that are packable (Reverb.Cli and Reverb.Runtime).
+    Every project gets the same version, so `reverb new` writes a Reverb.Runtime version that
+    matches the tool. Releases override it from the git tag: -p:Version=0.2.0.
+  -->
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Authors>Muneeb Mughal</Authors>
+    <Copyright>Copyright (c) 2026 Muneeb Mughal</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/muneeb-devp/reverb</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/muneeb-devp/reverb</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageTags>notebook;reactive;csharp;dotnet;data;charts;roslyn</PackageTags>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
 </Project>

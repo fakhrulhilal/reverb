@@ -6,10 +6,13 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>reverb</ToolCommandName>
     <PackageId>Reverb.Notebooks</PackageId>
-    <Version>0.1.0</Version>
     <Description>Reactive C# notebooks that are plain .cs files.</Description>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Reverb.Server\Reverb.Server.csproj" />
   </ItemGroup>

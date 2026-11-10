@@ -80,6 +80,9 @@ static class Program
     {
         get
         {
+            // The package version, prerelease label included ("0.2.0-beta.1"), without the commit hash.
+            var informational = typeof(Ui).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0];
+            if (!string.IsNullOrEmpty(informational)) return informational;
             var v = typeof(Ui).Assembly.GetName().Version ?? new Version(0, 1, 0);
             return $"{v.Major}.{v.Minor}.{v.Build}";
         }

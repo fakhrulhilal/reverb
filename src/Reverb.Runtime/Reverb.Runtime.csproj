@@ -4,8 +4,11 @@
     <RootNamespace>Reverb</RootNamespace>
     <IsPackable>true</IsPackable>
     <PackageId>Reverb.Runtime</PackageId>
-    <Version>0.1.0</Version>
     <Description>Display helpers and UI widgets for Reverb notebooks.</Description>
     <IsAotCompatible>false</IsAotCompatible>
+    <PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
 </Project>
