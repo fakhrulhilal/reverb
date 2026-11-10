@@ -1,0 +1,22 @@
+newline: lf, bom: no
+preamble:
+  shebang: #!/usr/bin/env dotnet
+  directive: package Reverb.Runtime 0.1.0
+  header: v1
+cells:
+  [0] setup
+      | using Reverb;
+  [1] markdown id=title
+      | # Charts
+  [2] code id=data
+      | var days = Enumerable.Range(1, 5).Select(i => new Day(new DateTime(2026, 3, i), i * 3.5, i % 2 == 0 ? "Even" : "Odd")).ToList();
+  [3] code id=line
+      | Chart.Line(days, x: d => d.Date, y: d => d.Total, title: "Daily total");
+  [4] code id=bar
+      | Chart.Bar(days, x: d => d.Date.Day, y: d => d.Total, series: d => d.Parity);
+  [5] code id=scatter
+      | var chart = Chart.Scatter(days, x: d => d.Total, y: d => d.Total * d.Total, yTitle: "Squared");
+      | Console.WriteLine(chart.Output.Text.Length > 0);
+  [6] types
+      | record Day(DateTime Date, double Total, string Parity);
+diagnostics: none

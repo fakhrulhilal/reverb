@@ -12,6 +12,7 @@
     <Project Path="tests/Reverb.Consistency.Tests/Reverb.Consistency.Tests.csproj" />
     <Project Path="tests/Reverb.Format.Tests/Reverb.Format.Tests.csproj" />
     <Project Path="tests/Reverb.Kernel.Tests/Reverb.Kernel.Tests.csproj" />
+    <Project Path="tests/Reverb.Runtime.Tests/Reverb.Runtime.Tests.csproj" />
     <Project Path="tests/Reverb.Server.Tests/Reverb.Server.Tests.csproj" />
     <Project Path="tests/Reverb.Spikes.Tests/Reverb.Spikes.Tests.csproj" />
   </Folder>

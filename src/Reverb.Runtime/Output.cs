@@ -85,6 +85,8 @@ public static class Formatters
         {
             case Output o:
                 return o;
+            case Chart c:
+                return c.Output;
             case Widget w:
                 return new Output(new Dictionary<string, string> { [Output.PlainText] = w.ToString(), [Output.Widget] = WidgetJson(w) });
             case Exception e:

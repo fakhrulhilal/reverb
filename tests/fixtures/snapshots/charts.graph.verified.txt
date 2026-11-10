@@ -1,0 +1,29 @@
+cells:
+  data
+    out:    days: List<Day>
+    uses types
+  line
+    in:     days: List<Day> <- data
+    uses types
+  bar
+    in:     days: List<Day> <- data
+    uses types
+  scatter
+    in:     days: List<Day> <- data
+    out:    chart: Chart
+    uses types
+edges:
+  data -> types
+  line -> data [days]
+  line -> types
+  bar -> data [days]
+  bar -> types
+  scatter -> data [days]
+  scatter -> types
+downstream:
+  data: line, bar, scatter
+  line: 
+  bar: 
+  scatter: 
+  types: data, line, bar, scatter
+diagnostics: none
