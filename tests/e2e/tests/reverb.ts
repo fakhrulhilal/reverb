@@ -29,7 +29,8 @@ export async function startReverb(command: "new" | "edit" | "run", file: string)
   if (!existsSync(cli)) throw new Error(`Build the CLI first (dotnet build): ${cli} doesn't exist.`);
   const child = spawn("dotnet", [cli, command, file, "--no-browser"], {
     cwd: join(file, ".."),
-    env: { ...process.env, DOTNET_NOLOGO: "1", DOTNET_CLI_TELEMETRY_OPTOUT: "1" },
+    // Kernels built for packages go under artifacts/ (shared between runs), not the user's ~/.reverb.
+    env: { ...process.env, DOTNET_NOLOGO: "1", DOTNET_CLI_TELEMETRY_OPTOUT: "1", REVERB_KERNEL_CACHE: join(repo, "artifacts", "kernels") },
   });
   let output = "";
   const url = await new Promise<string>((ok, fail) => {
