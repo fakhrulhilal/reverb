@@ -59,9 +59,23 @@ static class AmbientBuildFiles
             var path = Path.Combine(dir.FullName, name);
             if (!File.Exists(path)) return;
             seen.Add(name);
-            var text = File.ReadAllText(path).Trim();
-            if (text is "<Project />" or "<Project/>" or "<Project></Project>") return; // an empty stopper file
+            if (IsEmptyProject(path)) return; // a stopper file: it sets nothing, it only stops MSBuild looking further up
             findings.Add(new Finding(path, why));
+        }
+    }
+
+    /// <summary>A Project element with no elements in it (comments are fine) and no Sdk.</summary>
+    static bool IsEmptyProject(string path)
+    {
+        if (!path.EndsWith(".props", StringComparison.OrdinalIgnoreCase) && !path.EndsWith(".targets", StringComparison.OrdinalIgnoreCase)) return false;
+        try
+        {
+            var root = System.Xml.Linq.XDocument.Load(path).Root;
+            return root is { Name.LocalName: "Project" } && !root.Elements().Any() && root.Attribute("Sdk") is null;
+        }
+        catch (System.Xml.XmlException)
+        {
+            return false;
         }
     }
 }
