@@ -52,7 +52,7 @@ var byProduct = picked
     .Select(g => new ProductTotal(g.Key, g.Sum(s => s.Units), g.Sum(s => s.Revenue)))
     .OrderByDescending(p => p.Revenue)
     .ToList();
-Chart.Bar(byProduct, x: p => p.Product, y: p => p.Revenue, title: "Revenue by product");
+Chart.Bar(byProduct, x: p => p.Product, y: p => p.Revenue, title: "By product");
 
 // %% id=months
 picked
