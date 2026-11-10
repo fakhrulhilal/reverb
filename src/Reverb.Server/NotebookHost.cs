@@ -362,7 +362,7 @@ public sealed class NotebookHost : IAsyncDisposable
                 break;
 
             default:
-                client.Send(Error($"Unknown message type '{m.Type}'."));
+                client.Send(Error($"The page sent a message the server doesn't understand ('{m.Type}'). Reload the page; if it keeps happening, the page and the server are from different versions of Reverb."));
                 break;
         }
     }
@@ -458,7 +458,7 @@ public sealed class NotebookHost : IAsyncDisposable
         {
             if (!t.IsCompletedSuccessfully)
             {
-                client.Send(Error("The kernel stopped before it could work out the fix."));
+                client.Send(Error("The kernel stopped before it could work out the fix. Try again when it's back."));
                 return;
             }
             if (t.Result.Ok != true || t.Result.Text is not { } fixedText)
@@ -690,7 +690,7 @@ public sealed class NotebookHost : IAsyncDisposable
             }
             catch (Exception e) when (e is KernelBuildException or KernelExitedException or IOException or System.ComponentModel.Win32Exception)
             {
-                var message = e is KernelBuildException ? e.Message : $"The kernel didn't start: {e.Message}";
+                var message = e is KernelBuildException ? e.Message : $"The kernel didn't start: {e.Message} Check that the .NET 10 SDK is installed ('dotnet --version'), then press Restart.";
                 if (!inbox.Writer.TryWrite(() => Failed(message))) started.TrySetResult();
                 return;
             }
@@ -784,7 +784,7 @@ public sealed class NotebookHost : IAsyncDisposable
             SetKernelState("dead", $"The kernel stopped (exit code {exitCode}) three times in a minute, so Reverb stopped restarting it.{(options.AppMode ? "" : " Fix the cell that stops it, then press Restart.")}");
             return;
         }
-        SetKernelState("dead", $"The kernel stopped (exit code {exitCode}). Starting a new one.");
+        SetKernelState("dead", $"The kernel stopped (exit code {exitCode}), usually because a cell called Environment.Exit or overflowed the stack. Starting a new one.");
         Post(() => RestartKernelAsync(options.AppMode
             ? $"The kernel stopped (exit code {exitCode}) and was restarted."
             : $"The kernel stopped (exit code {exitCode}) and was restarted. Run cells to get their values back."));
@@ -964,7 +964,7 @@ public sealed class NotebookHost : IAsyncDisposable
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            Broadcast(Error($"{System.IO.Path.GetFileName(Path)} changed on disk but couldn't be read: {e.Message}"));
+            Broadcast(Error($"{System.IO.Path.GetFileName(Path)} changed on disk but couldn't be read: {e.Message} The editor keeps what it has; fix the file, or keep editing here and the next save replaces it."));
             return;
         }
         if (text == diskText) return;

@@ -98,7 +98,7 @@ public static class NotebookCodeFixes
     {
         var text = a.Text.ToString(directive).Trim();
         var doc = Edit(a, [new TextChange(directive, "")]);
-        var setup = doc.SetupCell ?? throw new CodeFixException("This notebook has no setup cell to move the using into.");
+        var setup = doc.SetupCell ?? throw new CodeFixException("This notebook has no setup cell to move the using into. Add a '// %% setup' cell at the top, then try the fix again.");
         var lines = setup.Source.Split('\n');
         var source = lines.Any(l => l.Trim() == text) ? setup.Source : Append(setup.Source, text);
         return doc.ReplaceCell(doc.IndexOf(setup.Key!), setup with { Source = source });
