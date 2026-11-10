@@ -1,0 +1,93 @@
+name: release
+
+# Push a tag like v0.1.0 (or v0.2.0-beta.1) to publish Reverb.Notebooks and Reverb.Runtime to
+# nuget.org and create a GitHub release. Running it by hand builds and checks the packages
+# without publishing them.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to build (nothing is published)
+        required: true
+        default: 0.0.0-dev
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Work out the version
+        id: version
+        shell: bash
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then v="${GITHUB_REF_NAME#v}"; else v="${{ inputs.version }}"; fi
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$v' isn't a version like 1.2.3 or 1.2.3-beta.1. Tags should look like v1.2.3."
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Version: $v"
+
+      # The full suite (all three OSes and the browser tests) runs in ci.yml for the same commit.
+      # This is a last check before anything is published.
+      - name: Build and test
+        run: |
+          dotnet build Reverb.slnx -c Release
+          dotnet test Reverb.slnx -c Release --no-build -m:1
+
+      - name: Pack
+        run: |
+          dotnet pack src/Reverb.Runtime -c Release -o packages -p:Version=${{ steps.version.outputs.version }}
+          dotnet pack src/Reverb.Cli -c Release -o packages -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Check the packages work once installed
+        run: eng/smoke-test.sh packages ${{ steps.version.outputs.version }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ steps.version.outputs.version }}
+          path: packages
+
+      - name: Publish to nuget.org
+        if: github.event_name == 'push'
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "::error::The NUGET_API_KEY secret isn't set. Add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          # The runtime goes first: a tool that writes '#:package Reverb.Runtime@x' must never be
+          # live before x is. The .snupkg symbol packages are pushed along with each .nupkg.
+          for id in Reverb.Runtime Reverb.Notebooks; do
+            dotnet nuget push "packages/$id.${{ steps.version.outputs.version }}.nupkg" \
+              --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          done
+
+      - name: Create the GitHub release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=(--generate-notes --title "Reverb ${{ steps.version.outputs.version }}")
+          [[ "${{ steps.version.outputs.version }}" == *-* ]] && flags+=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" packages/*.nupkg "${flags[@]}"
