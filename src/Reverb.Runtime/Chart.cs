@@ -16,6 +16,9 @@ public sealed class Chart
     /// <summary>More rows than this are cut off (with a note), to keep the page responsive.</summary>
     public const int MaxPoints = 5000;
 
+    /// <summary>Line charts mark each point up to this many; past that the marks just thicken the line.</summary>
+    public const int MaxMarkedPoints = 60;
+
     Chart(Output output) => Output = output;
 
     /// <summary>The chart as an output: Vega-Lite JSON plus a text summary.</summary>
@@ -137,7 +140,7 @@ public sealed class Chart
             w.WriteStartObject("mark");
             w.WriteString("type", mark);
             w.WriteBoolean("tooltip", true);
-            if (mark == "line") w.WriteBoolean("point", true);
+            if (mark == "line") w.WriteBoolean("point", rows.Count <= MaxMarkedPoints);
             if (mark == "point") w.WriteBoolean("filled", true);
             w.WriteEndObject();
 

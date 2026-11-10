@@ -39,6 +39,7 @@ public class ChartTests
         var (chart, _) = Hosted(() => Chart.Line(Sales, x: s => s.Day, y: s => s.Total));
         var spec = Spec(chart);
         Assert.Equal("line", spec.GetProperty("mark").GetProperty("type").GetString());
+        Assert.True(spec.GetProperty("mark").GetProperty("point").GetBoolean());
         var x = spec.GetProperty("encoding").GetProperty("x");
         Assert.Equal("temporal", x.GetProperty("type").GetString());
         Assert.Equal("Day", x.GetProperty("title").GetString());
@@ -131,6 +132,7 @@ public class ChartTests
         var many = Enumerable.Range(0, Chart.MaxPoints + 10).Select(i => new Sale(DateTime.UnixEpoch.AddDays(i), "X", i));
         var (chart, _) = Hosted(() => Chart.Line(many, x: s => s.Day, y: s => s.Total));
         Assert.Equal(Chart.MaxPoints, Spec(chart).GetProperty("data").GetProperty("values").GetArrayLength());
+        Assert.False(Spec(chart).GetProperty("mark").GetProperty("point").GetBoolean()); // too many to mark each one
         Assert.Contains("first 5,000 of 5,010 points", chart.Output.Text);
     }
 
