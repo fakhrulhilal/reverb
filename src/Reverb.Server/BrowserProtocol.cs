@@ -20,6 +20,11 @@ public static class BrowserMessages
     public const string WidgetSetValue = "widget.setValue";
     public const string KernelInterrupt = "kernel.interrupt";
     public const string KernelRestart = "kernel.restart";
+    public const string PackagesSet = "packages.set";
+    public const string LangCompletions = "lang.completions";
+    public const string LangHover = "lang.hover";
+    public const string LangSignatureHelp = "lang.signatureHelp";
+    public const string LangCodeFix = "lang.codeFix";
 
     // server -> browser
     public const string Snapshot = "notebook.snapshot";
@@ -31,6 +36,9 @@ public static class BrowserMessages
     public const string KernelStatus = "kernel.status";
     public const string FileSaved = "file.saved";
     public const string FileExternalChange = "file.externalChange";
+    public const string LangCompletionsResult = "lang.completionsResult";
+    public const string LangHoverResult = "lang.hoverResult";
+    public const string LangSignatureHelpResult = "lang.signatureHelpResult";
     public const string Error = "error";
 }
 
@@ -52,6 +60,20 @@ public sealed class ClientMessage
     public bool? Lazy { get; set; }
     public string? WidgetId { get; set; }
     public JsonElement? Value { get; set; }
+
+    /// <summary>For packages.set: every package the notebook should have (Reverb.Runtime aside).</summary>
+    public List<PackageView>? Packages { get; set; }
+
+    /// <summary>For lang.* requests: echoed in the answer so the page can match them up.</summary>
+    public int? RequestId { get; set; }
+
+    /// <summary>For lang.completions/hover/signatureHelp: the caret, as an offset into <see cref="Source"/> (the cell as the page has it now).</summary>
+    public int? Offset { get; set; }
+
+    /// <summary>For lang.codeFix: the diagnostic, by id and where it starts in the cell.</summary>
+    public string? DiagnosticId { get; set; }
+    public int? Line { get; set; }
+    public int? Column { get; set; }
 }
 
 /// <summary>A message to the browser. Which fields are set depends on <see cref="Type"/>.</summary>
@@ -89,6 +111,15 @@ public sealed class ServerMessage
 
     // kernel.status
     public string? State { get; set; }
+
+    // lang.*Result: offsets are into the cell source the request carried. Hover text is Markdown.
+    public int? RequestId { get; set; }
+    public int? From { get; set; }
+    public int? To { get; set; }
+    public List<CompletionData>? Completions { get; set; }
+    public List<SignatureData>? Signatures { get; set; }
+    public int? ActiveSignature { get; set; }
+    public int? ActiveParameter { get; set; }
 }
 
 public sealed class CellAttrs
@@ -132,7 +163,7 @@ public sealed class PackageView
 
 public sealed class KernelView
 {
-    /// <summary>starting, ready, busy or dead.</summary>
+    /// <summary>building (getting packages), starting, ready, busy or dead.</summary>
     public string State { get; set; } = "starting";
 
     public string? Message { get; set; }

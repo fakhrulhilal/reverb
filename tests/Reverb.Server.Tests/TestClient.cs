@@ -35,7 +35,10 @@ sealed class TestServer : IAsyncDisposable
         return dir;
     }
 
-    public static async Task<TestServer> StartAsync(string text, string name = "notebook.cs", bool appMode = false)
+    /// <summary>Package kernels built by tests, shared between them (under artifacts/, which git ignores).</summary>
+    public static string KernelCache { get; } = Path.Combine(Snapshot.RepoRoot, "artifacts", "kernels");
+
+    public static async Task<TestServer> StartAsync(string text, string name = "notebook.cs", bool appMode = false, string? kernelCache = null)
     {
         var path = Path.Combine(TempFolder(), name);
         await File.WriteAllTextAsync(path, text);
@@ -45,6 +48,7 @@ sealed class TestServer : IAsyncDisposable
             KernelEntryAssembly = CliAssembly,
             AutosaveDelay = TimeSpan.FromMilliseconds(200),
             AppMode = appMode,
+            KernelCacheRoot = kernelCache ?? KernelCache,
         });
         return new TestServer(server, path);
     }
@@ -134,6 +138,7 @@ sealed class TestClient : IAsyncDisposable
     public bool Lazy { get; private set; }
     public string Mode { get; private set; } = "";
     public int Snapshots { get; private set; }
+    public List<PackageView> Packages { get; private set; } = [];
 
     public static async Task<TestClient> ConnectAsync(EditorServer server, string? token = null, string? origin = null)
     {
@@ -178,6 +183,7 @@ sealed class TestClient : IAsyncDisposable
                 Mode = m.Mode ?? "";
                 KernelState = m.Kernel!.State;
                 Edges = m.Edges ?? [];
+                Packages = m.Packages ?? [];
                 Cells = [.. m.Cells!.Select(c => new Cell { Id = c.Id, Kind = c.Kind, Source = c.Source, Status = c.Status, Message = c.Message, Edited = c.Edited, Runs = c.Runs, Outputs = c.Outputs, Diagnostics = c.Diagnostics })];
                 break;
             case BrowserMessages.CellStatus when Find(m.CellId) is { } c:

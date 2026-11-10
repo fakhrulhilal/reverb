@@ -25,6 +25,9 @@ public sealed record EditorOptions
 
     public TimeSpan AutosaveDelay { get; init; } = TimeSpan.FromSeconds(1);
 
+    /// <summary>Where kernels built for notebook packages are kept. Null means the usual place (~/.reverb/kernels).</summary>
+    public string? KernelCacheRoot { get; init; }
+
     /// <summary>
     /// Serve the notebook as an app (<c>reverb run</c>): outputs and widgets only. Code isn't sent
     /// to the browser, nothing can be edited, the file is never written, and lazy mode is off.
@@ -89,7 +92,16 @@ public sealed class NotebookHost : IAsyncDisposable
     string kernelState = "starting";
     string? kernelMessage;
     bool kernelLazy;
-    bool disposed;
+    volatile bool disposed;
+
+    /// <summary>The packages the current kernel was started with (or is being built with).</summary>
+    IReadOnlyList<NotebookPackage> kernelPackages = [];
+
+    /// <summary>Work sent while the kernel was building or starting. Sent once it's up.</summary>
+    readonly List<(KernelRequest Request, Action? Done)> waitingWork = [];
+
+    /// <summary>Cancelled when the host shuts down, so a package build in progress stops too.</summary>
+    readonly CancellationTokenSource lifetime = new();
     readonly List<DateTime> crashes = [];
 
     // A widget change that's still running, and the newest value that arrived meanwhile.
@@ -125,7 +137,15 @@ public sealed class NotebookHost : IAsyncDisposable
         var path = System.IO.Path.GetFullPath(options.NotebookPath);
         var text = NotebookFile.ReadText(path);
         var host = new NotebookHost(options, Load(text, options.RuntimeVersion), text);
-        await host.InvokeAsync(() => host.StartKernelAsync(run: true));
+        Task started = Task.CompletedTask;
+        await host.InvokeAsync(() =>
+        {
+            started = host.StartKernel(run: true, readyMessage: null);
+            return Task.CompletedTask;
+        });
+        // A plain kernel is up in a moment, so wait for it. Building one for packages can take a
+        // while; the page opens meanwhile and shows the progress.
+        if (host.kernelPackages.Count == 0) await started;
         return host;
     }
 
@@ -314,6 +334,33 @@ public sealed class NotebookHost : IAsyncDisposable
                 await RestartKernelAsync("Restarted.");
                 break;
 
+            case BrowserMessages.LangCompletions or BrowserMessages.LangHover or BrowserMessages.LangSignatureHelp:
+                Language(client, m);
+                break;
+
+            case BrowserMessages.LangCodeFix:
+                CodeFix(client, m);
+                break;
+
+            case BrowserMessages.PackagesSet:
+                if (m.Packages is null) return;
+                NotebookDocument withPackages;
+                try
+                {
+                    withPackages = doc.WithPackages(m.Packages.Select(p => new NotebookPackage(p.Name.Trim(), (p.Version ?? "").Trim())));
+                }
+                catch (ArgumentException e)
+                {
+                    client.Send(Error(e.Message));
+                    return;
+                }
+                if (ReferenceEquals(withPackages, doc)) return;
+                doc = withPackages;
+                Changed(saveNow: true);
+                BroadcastSnapshot();
+                await RestartIfPackagesChangedAsync();
+                break;
+
             default:
                 client.Send(Error($"Unknown message type '{m.Type}'."));
                 break;
@@ -321,6 +368,118 @@ public sealed class NotebookHost : IAsyncDisposable
     }
 
     static ServerMessage Error(string message) => new() { Type = BrowserMessages.Error, Message = message };
+
+    /// <summary>
+    /// Completions, hover or signature help, answered to the asking tab only. The request carries
+    /// the cell as the page has it right now (edits may not have reached the server yet).
+    /// </summary>
+    void Language(ClientSession client, ClientMessage m)
+    {
+        var resultType = m.Type switch
+        {
+            BrowserMessages.LangCompletions => BrowserMessages.LangCompletionsResult,
+            BrowserMessages.LangHover => BrowserMessages.LangHoverResult,
+            _ => BrowserMessages.LangSignatureHelpResult,
+        };
+        var empty = new ServerMessage { Type = resultType, RequestId = m.RequestId };
+        var index = m.CellId is null ? -1 : doc.IndexOf(m.CellId);
+        if (index < 0 || m.Offset is not { } offset || kernel is null || kernelState == "dead")
+        {
+            client.Send(empty);
+            return;
+        }
+
+        // The kernel sees the cell as it will be saved: without blank lines at the start. Shift
+        // offsets to match, and back again in the answer.
+        var raw = (m.Source ?? doc.Cells[index].Source).ReplaceLineEndings("\n");
+        var lead = LeadingBlankLines(raw);
+        var text = doc.ReplaceCell(index, doc.Cells[index] with { Source = NotebookDocument.NormalizeSource(raw) }).Serialize();
+        var request = new KernelRequest
+        {
+            Type = m.Type switch
+            {
+                BrowserMessages.LangCompletions => RequestTypes.Complete,
+                BrowserMessages.LangHover => RequestTypes.Hover,
+                _ => RequestTypes.SignatureHelp,
+            },
+            Text = text,
+            Cell = m.CellId,
+            Offset = Math.Max(0, offset - lead),
+        };
+        _ = kernel.SendAsync(request).ContinueWith(t => Post(() =>
+        {
+            if (!t.IsCompletedSuccessfully || t.Result.Ok != true)
+            {
+                client.Send(empty);
+                return;
+            }
+            var r = t.Result;
+            client.Send(new ServerMessage
+            {
+                Type = resultType,
+                RequestId = m.RequestId,
+                From = r.From + lead,
+                To = r.To + lead,
+                Text = r.Text,
+                Completions = r.Completions,
+                Signatures = r.Signatures,
+                ActiveSignature = r.ActiveSignature,
+                ActiveParameter = r.ActiveParameter,
+            });
+        }), TaskScheduler.Default);
+    }
+
+    static int LeadingBlankLines(string source)
+    {
+        var at = 0;
+        while (at < source.Length)
+        {
+            var end = source.IndexOf('\n', at);
+            if (end < 0 || source[at..end].Trim().Length > 0) break;
+            at = end + 1;
+        }
+        return at;
+    }
+
+    /// <summary>
+    /// Applies Reverb's fix for a diagnostic. The kernel works out the new notebook; it's used only if
+    /// nothing changed meanwhile. The cells the fix touched are run, as if the user had edited and run them.
+    /// </summary>
+    void CodeFix(ClientSession client, ClientMessage m)
+    {
+        if (m.CellId is null || m.DiagnosticId is null || kernel is null || kernelState == "dead")
+        {
+            client.Send(Error("The kernel isn't running, so Reverb can't work out the fix. Restart it and try again."));
+            return;
+        }
+        var asked = version;
+        var request = new KernelRequest { Type = RequestTypes.CodeFix, Text = doc.Serialize(), Cell = m.CellId, DiagnosticId = m.DiagnosticId, Line = m.Line, Column = m.Column };
+        _ = kernel.SendAsync(request).ContinueWith(t => Post(() =>
+        {
+            if (!t.IsCompletedSuccessfully)
+            {
+                client.Send(Error("The kernel stopped before it could work out the fix."));
+                return;
+            }
+            if (t.Result.Ok != true || t.Result.Text is not { } fixedText)
+            {
+                client.Send(Error(t.Result.Message ?? "Reverb couldn't fix that."));
+                return;
+            }
+            if (version != asked)
+            {
+                client.Send(Error("The notebook changed while Reverb was working out the fix. Try the fix again."));
+                return;
+            }
+            var before = doc;
+            doc = NotebookDocument.Parse(fixedText);
+            foreach (var cell in doc.Cells)
+                if (cell.Key is { } key && before.FindCell(key)?.Source != cell.Source) Submit(cell);
+            Changed(saveNow: true);
+            SendUpdate();
+            BroadcastSnapshot();
+        }), TaskScheduler.Default);
+    }
 
     void CreateCell(ClientMessage m)
     {
@@ -448,7 +607,12 @@ public sealed class NotebookHost : IAsyncDisposable
     /// <summary>Sends a request that runs code. The kernel shows as busy until it's done.</summary>
     void SendWork(KernelRequest request, Action? done = null)
     {
-        if (kernel is null || kernelState == "dead") return;
+        if (kernel is null)
+        {
+            if (kernelState is "building" or "starting") waitingWork.Add((request, done));
+            return;
+        }
+        if (kernelState == "dead") return;
         var generation = kernelGeneration;
         outstanding++;
         SetKernelState("busy", null);
@@ -483,63 +647,127 @@ public sealed class NotebookHost : IAsyncDisposable
 
     // ---- the kernel process -----------------------------------------------------------------------
 
-    /// <summary>Starts a kernel and opens the notebook in it. <paramref name="run"/> runs it too (unless it's lazy).</summary>
-    async Task StartKernelAsync(bool run)
+    /// <summary>
+    /// Starts a kernel, building one with the notebook's packages first if it has any, and opens the
+    /// notebook in it. The build and start happen off the host's thread so typing and saving carry
+    /// on; work sent meanwhile waits. <paramref name="run"/> runs the notebook too (unless it's lazy).
+    /// The task completes once the kernel is up or has failed to start.
+    /// </summary>
+    Task StartKernel(bool run, string? readyMessage)
     {
         var generation = ++kernelGeneration;
         outstanding = 0;
-        SetKernelState("starting", kernelMessage);
-        KernelClient client;
-        try
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var packages = KernelBuilder.PackagesOf(doc.Preamble.Directives);
+        kernelPackages = packages;
+        if (packages.Count > 0) SetKernelState("building", $"Getting {string.Join(", ", packages)}…");
+        else SetKernelState("starting", readyMessage);
+
+        var launch = new KernelLaunch { EntryAssembly = options.KernelEntryAssembly, NotebookPath = Path, Directives = doc.Preamble.Directives };
+        var request = new KernelBuildRequest
         {
-            client = await KernelClient.StartAsync(new KernelLaunch
+            Packages = packages,
+            ToolDirectory = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(options.KernelEntryAssembly))!,
+            NotebookDirectory = System.IO.Path.GetDirectoryName(Path),
+            CacheRoot = options.KernelCacheRoot ?? KernelBuilder.DefaultCacheRoot,
+        };
+        _ = Task.Run(async () =>
+        {
+            KernelClient client;
+            try
             {
-                EntryAssembly = options.KernelEntryAssembly,
-                NotebookPath = Path,
-                Directives = doc.Preamble.Directives,
-            });
-        }
-        catch (Exception e) when (e is KernelExitedException or IOException or System.ComponentModel.Win32Exception)
+                var build = await KernelBuilder.EnsureAsync(request, step => Post(() =>
+                {
+                    if (generation == kernelGeneration) SetKernelState("building", step + "…");
+                }), lifetime.Token);
+                if (build is not null) Post(() => { if (generation == kernelGeneration) SetKernelState("starting", readyMessage); });
+                client = await KernelClient.StartAsync(launch.WithBuild(build), lifetime.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                started.TrySetResult();
+                return;
+            }
+            catch (Exception e) when (e is KernelBuildException or KernelExitedException or IOException or System.ComponentModel.Win32Exception)
+            {
+                var message = e is KernelBuildException ? e.Message : $"The kernel didn't start: {e.Message}";
+                if (!inbox.Writer.TryWrite(() => Failed(message))) started.TrySetResult();
+                return;
+            }
+            // If the host has shut down there's nobody to hand the kernel to.
+            if (!inbox.Writer.TryWrite(() => AttachAsync(client))) await client.DisposeAsync();
+        });
+        return started.Task;
+
+        Task Failed(string message)
         {
-            SetKernelState("dead", $"The kernel didn't start: {e.Message}");
-            return;
+            if (generation == kernelGeneration)
+            {
+                waitingWork.Clear();
+                SetKernelState("dead", message);
+            }
+            started.TrySetResult();
+            return Task.CompletedTask;
         }
 
-        client.Event += e => Post(() => OnKernelEvent(generation, e));
-        client.StrayOutput += line => options.Log.WriteLine(line);
-        client.Exited += code => Post(() => OnKernelExited(generation, code));
-        kernel = client;
-        if (disposed)
+        async Task AttachAsync(KernelClient client)
         {
-            await client.DisposeAsync();
-            return;
-        }
+            started.TrySetResult();
+            if (generation != kernelGeneration || disposed)
+            {
+                // Restarted, or the packages changed again, while this one was starting.
+                await client.DisposeAsync();
+                return;
+            }
+            client.Event += e => Post(() => OnKernelEvent(generation, e));
+            client.StrayOutput += line => options.Log.WriteLine(line);
+            client.Exited += code => Post(() => OnKernelExited(generation, code));
+            kernel = client;
 
-        SetKernelState("ready", kernelMessage);
-        kernelLazy = LazyInFile;
-        SubmitAll();
-        SendWork(new KernelRequest { Type = RequestTypes.Open, Text = KernelDocument().Serialize(), Lazy = kernelLazy, Run = run });
-        Analyze();
+            SetKernelState("ready", readyMessage);
+            kernelLazy = LazyInFile;
+            SubmitAll();
+            SendWork(new KernelRequest { Type = RequestTypes.Open, Text = KernelDocument().Serialize(), Lazy = kernelLazy, Run = run });
+            Analyze();
+
+            // Runs asked for while the kernel was on its way. The document they carried may be
+            // out of date by now, so send the current one.
+            var waiting = waitingWork.ToList();
+            waitingWork.Clear();
+            foreach (var (r, done) in waiting)
+            {
+                if (r.Type == RequestTypes.Update) r.Text = KernelDocument().Serialize();
+                SendWork(r, done);
+            }
+        }
     }
 
-    async Task RestartKernelAsync(string message)
+    async Task RestartKernelAsync(string message, bool? run = null)
     {
         var old = kernel;
         kernel = null;
         kernelGeneration++;
         widgetsInFlight.Clear();
         widgetsWaiting.Clear();
+        waitingWork.Clear();
         if (old is not null)
         {
             old.Kill();
             await old.DisposeAsync();
         }
         MarkAllStale();
-        kernelMessage = message;
         // In the editor nothing runs until asked: if a cell stopped the kernel, running it again
         // would just do it again. An app's viewers can't run cells, so an app runs everything.
-        await StartKernelAsync(run: options.AppMode);
+        _ = StartKernel(run ?? options.AppMode, message);
         BroadcastSnapshot();
+    }
+
+    /// <summary>A kernel only has the packages it was built with, so a new set needs a new kernel.</summary>
+    async Task RestartIfPackagesChangedAsync()
+    {
+        if (KernelBuilder.PackagesOf(doc.Preamble.Directives).SequenceEqual(kernelPackages)) return;
+        // Everything is stale in a new kernel, and the user asked for the change, so run (unless lazy).
+        await RestartKernelAsync("The packages changed, so the kernel was rebuilt.", run: true);
     }
 
     void OnKernelExited(int generation, int exitCode)
@@ -663,7 +891,10 @@ public sealed class NotebookHost : IAsyncDisposable
         Mode = options.AppMode ? "app" : "edit",
         Lazy = LazyInFile,
         Kernel = new KernelView { State = kernelState, Message = kernelMessage },
-        Packages = [.. doc.Preamble.Directives.Where(d => d.Kind == "package").Select(d => new PackageView { Name = d.Name, Version = d.Value })],
+        // Reverb.Runtime is Reverb's to manage, so it isn't listed.
+        Packages = [.. doc.Preamble.Directives
+            .Where(d => d.Kind == "package" && !d.Name.Equals(NotebookUpgrader.RuntimePackage, StringComparison.OrdinalIgnoreCase))
+            .Select(d => new PackageView { Name = d.Name, Version = d.Value })],
         NotebookDiagnostics = options.AppMode ? [] : DiagnosticsOf(null),
         Edges = options.AppMode ? [] : graph,
         Cells = [.. doc.Cells.Where(c => c.Key is not null && (!options.AppMode || c.Kind is CellKind.Code or CellKind.Markdown)).Select(CellViewOf)],
@@ -743,11 +974,18 @@ public sealed class NotebookHost : IAsyncDisposable
         saveTimer.Change(Timeout.Infinite, Timeout.Infinite);
         foreach (var gone in runtime.Keys.Where(k => doc.FindCell(k) is null).ToList()) runtime.Remove(gone);
         version++;
-        SyncLazy();
-        SubmitAll();
-        SendUpdate();
-        Analyze();
-        BroadcastSnapshot();
+        if (!KernelBuilder.PackagesOf(doc.Preamble.Directives).SequenceEqual(kernelPackages))
+        {
+            await RestartIfPackagesChangedAsync();
+        }
+        else
+        {
+            SyncLazy();
+            SubmitAll();
+            SendUpdate();
+            Analyze();
+            BroadcastSnapshot();
+        }
         Broadcast(new ServerMessage { Type = BrowserMessages.FileExternalChange, NotebookVersion = version, Message = $"{System.IO.Path.GetFileName(Path)} changed on disk. The notebook was reloaded." });
     }
 
@@ -768,6 +1006,7 @@ public sealed class NotebookHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        lifetime.Cancel();
         await InvokeAsync(async () =>
         {
             disposed = true;
