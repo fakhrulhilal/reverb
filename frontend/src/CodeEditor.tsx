@@ -127,9 +127,10 @@ export function CodeEditor(props: Props) {
       ),
       props.language === "csharp" ? languageServices(() => latest.current.ask) : [],
       keymap.of([
-        { key: "Mod-Enter", run: () => (k().run(), true), preventDefault: true },
-        { key: "Shift-Enter", run: () => (k().runAndNext(), true), preventDefault: true },
-        { key: "Mod-Shift-Enter", run: () => (k().runAll(), true), preventDefault: true },
+        // Running closes an open completion list, so the next Enter starts a new line.
+        { key: "Mod-Enter", run: (v) => (closeCompletion(v), k().run(), true), preventDefault: true },
+        { key: "Shift-Enter", run: (v) => (closeCompletion(v), k().runAndNext(), true), preventDefault: true },
+        { key: "Mod-Shift-Enter", run: (v) => (closeCompletion(v), k().runAll(), true), preventDefault: true },
         { key: "Mod-s", run: () => (k().save(), true), preventDefault: true },
         { key: "Escape", run: () => (k().escape(), true) },
         {

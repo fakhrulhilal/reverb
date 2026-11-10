@@ -63,3 +63,16 @@ test("a misplaced using has a fix button that moves it to setup", async ({ page,
   await expect(editorOf(cell)).not.toContainText("using System.Text;");
   await expect(stdoutOf(cell)).toHaveText("42", { timeout: 30_000 });
 });
+
+test("running a cell closes the completion list, so Enter starts a new line", async ({ page, reverb: _ }) => {
+  await page.getByRole("button", { name: "+ Code cell" }).click();
+  await page.keyboard.type("var total = 1;");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("var t = tot");
+  const popup = page.locator(".cm-tooltip-autocomplete");
+  await expect(popup.getByRole("option", { name: /^total/ })).toBeVisible({ timeout: 15_000 });
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(popup).toHaveCount(0);
+  await page.keyboard.press("Enter");
+  await expect(editorOf(codeCells(page).last()).locator(".cm-line")).toHaveCount(2);
+});
