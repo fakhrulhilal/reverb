@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Reverb.Analysis;
 using Reverb.Format;
+using Reverb.Kernel;
 
 namespace Reverb.Cli;
 
@@ -10,7 +11,7 @@ namespace Reverb.Cli;
 /// </summary>
 static class CheckCommand
 {
-    public static int Run(string[] args)
+    public static async Task<int> RunAsync(string[] args)
     {
         if (args.Length != 1 || args[0].StartsWith('-'))
         {
@@ -39,13 +40,20 @@ static class CheckCommand
             warnings++;
         }
 
-        var packages = loaded.Document.Preamble.Directives
-            .Where(d => d.Kind == "package" && !d.Name.Equals(NotebookUpgrader.RuntimePackage, StringComparison.OrdinalIgnoreCase))
-            .Select(d => d.Name).ToList();
-        if (packages.Count > 0)
-            output.WriteLine($"{path}: info: this version of Reverb doesn't load NuGet packages yet ({string.Join(", ", packages)}), so errors about their types may not be real. 'dotnet run' resolves them.");
+        var references = ReferenceSet.FromCurrentProcess(typeof(Ui).Assembly);
+        try
+        {
+            // Package types have to be known for the diagnostics to be right.
+            if (await PackageKernels.EnsureAsync(path, loaded.Document.Preamble.Directives) is { } build)
+                references = references.With(build.References);
+        }
+        catch (KernelBuildException e)
+        {
+            output.WriteLine($"{path}: error RVB201: {e.Message}");
+            return 1;
+        }
 
-        var analysis = NotebookAnalysis.Create(loaded.Document, ReferenceSet.FromCurrentProcess(typeof(Ui).Assembly));
+        var analysis = NotebookAnalysis.Create(loaded.Document, references);
         foreach (var d in analysis.Diagnostics)
         {
             if (d.Severity == DiagnosticSeverity.Error) errors++;

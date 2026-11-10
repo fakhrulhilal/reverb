@@ -83,14 +83,15 @@ static class ExecCommand
         KernelClient client;
         try
         {
+            var build = await PackageKernels.EnsureAsync(path, loaded.Document.Preamble.Directives);
             client = await KernelClient.StartAsync(new KernelLaunch
             {
                 EntryAssembly = typeof(Program).Assembly.Location,
                 NotebookPath = path,
                 Directives = loaded.Document.Preamble.Directives,
-            });
+            }.WithBuild(build));
         }
-        catch (KernelExitedException e)
+        catch (Exception e) when (e is KernelExitedException or KernelBuildException)
         {
             Console.Error.WriteLine($"error: {e.Message}");
             return 2;

@@ -86,7 +86,8 @@ public sealed class KernelSession : IAsyncDisposable
         compiler = new CellCompiler(this.references);
     }
 
-    static readonly Lazy<ReferenceSet> DefaultReferences = new(() => ReferenceSet.FromCurrentProcess(typeof(Ui).Assembly));
+    static readonly Lazy<ReferenceSet> DefaultReferences = new(() =>
+        ReferenceSet.FromCurrentProcess(typeof(Ui).Assembly).With(KernelProcess.PackageReferences()));
 
     sealed class NoEvents : IKernelEvents;
 

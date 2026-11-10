@@ -21,6 +21,20 @@ public sealed record KernelLaunch
     public string DotnetPath { get; init; } = DotnetHost.Find();
 
     public string? WorkingDirectory { get; init; }
+
+    /// <summary>Arguments after the entry assembly. The CLI needs <c>__kernel</c>; a package kernel needs none.</summary>
+    public IReadOnlyList<string> Arguments { get; init; } = ["__kernel"];
+
+    /// <summary>
+    /// Run on Microsoft.NETCore.App alone. Right for the CLI, which also lists ASP.NET Core for the editor
+    /// server; a package kernel keeps whatever frameworks its packages need.
+    /// </summary>
+    public bool BaseFrameworkOnly { get; init; } = true;
+
+    /// <summary>This launch, but starting the given package kernel (or the plain one when null).</summary>
+    public KernelLaunch WithBuild(KernelBuild? build) => build is null
+        ? this
+        : this with { EntryAssembly = build.EntryAssembly, Arguments = [], BaseFrameworkOnly = false };
 }
 
 public sealed class KernelExitedException(int exitCode, string stderr)
@@ -71,7 +85,7 @@ public sealed class KernelClient : IAsyncDisposable
 
     async Task StartProcessAsync(CancellationToken cancellationToken)
     {
-        var config = FileBasedAppRuntime.WriteRuntimeConfig(launch.EntryAssembly, launch.Directives, launch.NotebookPath);
+        var config = FileBasedAppRuntime.WriteRuntimeConfig(launch.EntryAssembly, launch.Directives, launch.NotebookPath, launch.BaseFrameworkOnly);
         var info = new ProcessStartInfo(launch.DotnetPath)
         {
             RedirectStandardInput = true,
@@ -83,7 +97,7 @@ public sealed class KernelClient : IAsyncDisposable
             StandardInputEncoding = new UTF8Encoding(false),
             WorkingDirectory = launch.WorkingDirectory ?? Environment.CurrentDirectory,
         };
-        foreach (var arg in new[] { "exec", "--runtimeconfig", config, launch.EntryAssembly, "__kernel" }) info.ArgumentList.Add(arg);
+        foreach (var arg in new[] { "exec", "--runtimeconfig", config, launch.EntryAssembly }.Concat(launch.Arguments)) info.ArgumentList.Add(arg);
 
         ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var p = new Process { StartInfo = info, EnableRaisingEvents = true };
@@ -284,14 +298,14 @@ public static class FileBasedAppRuntime
     /// Writes a runtimeconfig for the kernel: the entry assembly's own config plus the notebook's
     /// switches. Returns its path. Files are named by content, so identical configs are shared.
     /// </summary>
-    public static string WriteRuntimeConfig(string entryAssembly, IEnumerable<Directive> directives, string? notebookPath)
+    public static string WriteRuntimeConfig(string entryAssembly, IEnumerable<Directive> directives, string? notebookPath, bool baseFrameworkOnly = true)
     {
         var basePath = Path.ChangeExtension(entryAssembly, ".runtimeconfig.json");
         var root = JsonNode.Parse(File.ReadAllText(basePath))!.AsObject();
         var options = root["runtimeOptions"]!.AsObject();
         // The entry assembly may also need ASP.NET Core (the editor server does). A file-based app
         // only gets the base framework, so the kernel does too.
-        if (options["frameworks"] is JsonArray frameworks)
+        if (baseFrameworkOnly && options["frameworks"] is JsonArray frameworks)
         {
             var core = frameworks.FirstOrDefault(f => (string?)f?["name"] == "Microsoft.NETCore.App")
                 ?? throw new InvalidOperationException($"{basePath} doesn't list Microsoft.NETCore.App.");

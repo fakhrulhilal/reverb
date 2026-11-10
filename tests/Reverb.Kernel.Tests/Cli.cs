@@ -36,6 +36,8 @@ static class Cli
         foreach (var a in args) info.ArgumentList.Add(a);
         info.Environment["DOTNET_NOLOGO"] = "1";
         info.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        // Package kernels the CLI builds go under artifacts/, not the user's ~/.reverb.
+        info.Environment["REVERB_KERNEL_CACHE"] = Path.Combine(Snapshot.RepoRoot, "artifacts", "kernels");
         using var p = Process.Start(info)!;
         var stdout = p.StandardOutput.ReadToEndAsync();
         var stderr = p.StandardError.ReadToEndAsync();

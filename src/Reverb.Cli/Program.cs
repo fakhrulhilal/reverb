@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Text;
 using Reverb.Kernel;
 
 namespace Reverb.Cli;
@@ -42,13 +41,11 @@ static class Program
         switch (args[0])
         {
             case "__kernel":
-                KernelTrace.Enable();
-                KernelTrace.Mark("main");
-                return await KernelServer.RunAsync(new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false)), Console.OpenStandardOutput());
+                return await KernelProcess.RunAsync();
             case "exec":
                 return await ExecCommand.RunAsync(args[1..]);
             case "check":
-                return CheckCommand.Run(args[1..]);
+                return await CheckCommand.RunAsync(args[1..]);
             case "--version" or "-v" or "version":
                 Console.WriteLine(Version);
                 return 0;
