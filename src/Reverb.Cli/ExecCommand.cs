@@ -10,13 +10,6 @@ namespace Reverb.Cli;
 /// </summary>
 static class ExecCommand
 {
-    sealed class CellResult
-    {
-        public string Status = "stale";
-        public string? Message;
-        public List<OutputData> Outputs = [];
-    }
-
     public static async Task<int> RunAsync(string[] args)
     {
         string? path = null;
@@ -44,86 +37,29 @@ static class ExecCommand
         foreach (var f in AmbientBuildFiles.Find(path))
             Console.Error.WriteLine($"warning: {f.Path}: {f.Why}");
 
-        var results = new Dictionary<string, CellResult>(StringComparer.Ordinal);
         var order = loaded.Document.Cells.Where(c => c.Kind == Format.CellKind.Code && c.Key is not null).Select(c => c.Key!).ToList();
-        List<DiagnosticData> diagnostics = [];
-        CellResult Result(string cell) => results.TryGetValue(cell, out var r) ? r : results[cell] = new CellResult();
 
         // Kernel output can mix stdout text and displays; print in arrival order so it matches dotnet run.
         var stdout = Console.Out;
         var stderr = Console.Error;
-        void OnEvent(KernelEvent e)
+        void Print(KernelEvent e)
         {
-            switch (e.Type)
-            {
-                case EventTypes.Diagnostics:
-                    diagnostics = e.Diagnostics ?? [];
-                    break;
-                case EventTypes.Status when e.Cell is not null:
-                    Result(e.Cell).Status = e.Status ?? "";
-                    Result(e.Cell).Message = e.Message;
-                    break;
-                case EventTypes.Cleared when e.Cell is not null:
-                    Result(e.Cell).Outputs.Clear();
-                    break;
-                case EventTypes.Stream when e.Cell is not null:
-                    Result(e.Cell).Outputs.Add(new OutputData { Stream = e.Stream, Text = e.Text });
-                    if (!json) (e.Stream == StreamItem.Stderr ? stderr : stdout).Write(e.Text);
-                    break;
-                case EventTypes.Display when e.Cell is not null && e.Output is not null:
-                    Result(e.Cell).Outputs.Add(e.Output);
-                    if (!json) PrintDisplay(e.Cell, e.Output, stdout, stderr);
-                    break;
-                case EventTypes.Outputs when e.Cell is not null:
-                    Result(e.Cell).Outputs = e.Outputs ?? [];
-                    break;
-            }
+            if (json) return;
+            if (e.Type == EventTypes.Stream && e.Cell is not null) (e.Stream == StreamItem.Stderr ? stderr : stdout).Write(e.Text);
+            else if (e.Type == EventTypes.Display && e.Cell is not null && e.Output is not null) PrintDisplay(e.Cell, e.Output, stdout, stderr);
         }
 
-        KernelClient client;
-        try
-        {
-            var build = await PackageKernels.EnsureAsync(path, loaded.Document.Preamble.Directives);
-            client = await KernelClient.StartAsync(new KernelLaunch
-            {
-                EntryAssembly = typeof(Program).Assembly.Location,
-                NotebookPath = path,
-                Directives = loaded.Document.Preamble.Directives,
-            }.WithBuild(build));
-        }
-        catch (Exception e) when (e is KernelExitedException or KernelBuildException)
-        {
-            Console.Error.WriteLine($"error: {e.Message}");
-            return 2;
-        }
-
+        var run = await NotebookRun.RunAsync(path, loaded, notebookArgs, Print, line => { if (!json) stdout.WriteLine(line); });
         var failed = false;
-        await using (client)
+        if (run.KernelFailure is not null)
         {
-            client.Event += OnEvent;
-            client.StrayOutput += line => { if (!json) stdout.WriteLine(line); };
-            try
-            {
-                await client.SendAsync(new KernelRequest
-                {
-                    Type = RequestTypes.Open,
-                    Text = loaded.Document.Serialize(),
-                    Path = Path.GetFullPath(path),
-                    Args = notebookArgs,
-                    Lazy = false,
-                    Run = true,
-                });
-            }
-            catch (KernelExitedException e)
-            {
-                Console.Error.WriteLine($"error: {e.Message}");
-                failed = true;
-            }
-            client.Event -= OnEvent;
-            // With tracing on, show how the kernel spent its time.
-            if (Environment.GetEnvironmentVariable("REVERB_KERNEL_TRACE") is { Length: > 0 }) Console.Error.Write(client.StandardError);
+            Console.Error.WriteLine($"error: {run.KernelFailure}");
+            if (!run.Started) return 2;
+            failed = true;
         }
         stdout.Flush();
+        var diagnostics = run.Diagnostics;
+        NotebookRun.CellResult Result(string cell) => run[cell];
 
         foreach (var cell in order)
         {
@@ -156,7 +92,7 @@ static class ExecCommand
         stdout.WriteLine(text);
     }
 
-    static void WriteJson(TextWriter writer, string path, List<string> order, Func<string, CellResult> result, List<DiagnosticData> diagnostics, bool failed)
+    static void WriteJson(TextWriter writer, string path, List<string> order, Func<string, NotebookRun.CellResult> result, List<DiagnosticData> diagnostics, bool failed)
     {
         using var stream = new MemoryStream();
         using (var w = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
