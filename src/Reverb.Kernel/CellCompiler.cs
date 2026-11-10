@@ -37,8 +37,8 @@ public sealed class CellCompiler : IDisposable
     }
 
     /// <summary>
-    /// One compile-and-load at a time per process. Two at once (the warm-up session and the first
-    /// real run) occasionally hung forever on Windows; nothing gains from running them together.
+    /// One compile-and-load at a time per process. The warm-up session and the first real run can
+    /// both compile, and running them together only makes them compete for the same CPU.
     /// </summary>
     static readonly Lock compileGate = new();
 
