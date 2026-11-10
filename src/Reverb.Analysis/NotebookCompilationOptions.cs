@@ -9,7 +9,9 @@ namespace Reverb.Analysis;
 /// <summary>The metadata references a notebook compiles against.</summary>
 public sealed class ReferenceSet
 {
-    ReferenceSet(ImmutableArray<MetadataReference> references) => References = references;
+    // The same file can be listed twice (the test host's trusted platform assemblies list
+    // System.Private.CoreLib twice, for one). A compilation shrugs that off; a workspace project throws.
+    ReferenceSet(ImmutableArray<MetadataReference> references) => References = [.. references.Distinct()];
 
     public ImmutableArray<MetadataReference> References { get; }
 
@@ -30,6 +32,10 @@ public sealed class ReferenceSet
 
     public static ReferenceSet FromFiles(IEnumerable<string> paths) =>
         new([.. paths.Select(p => (MetadataReference)CachedReference(p))]);
+
+    /// <summary>This set plus the given files (package assemblies, say).</summary>
+    public ReferenceSet With(IEnumerable<string> paths) =>
+        new(References.AddRange(paths.Select(p => (MetadataReference)CachedReference(p))));
 
     // Sharing PortableExecutableReference instances lets Roslyn reuse metadata across compilations.
     static readonly System.Collections.Concurrent.ConcurrentDictionary<string, PortableExecutableReference> cache = new(StringComparer.OrdinalIgnoreCase);
