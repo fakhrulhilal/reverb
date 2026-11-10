@@ -1,0 +1,15 @@
+.export-header { display: flex; align-items: center; gap: 12px; max-width: 960px; margin: 0 auto; padding: 14px 16px 0; }
+.export-header .spacer { flex: 1; }
+.export-cell { max-width: 960px; margin: 14px auto; padding: 0 16px; }
+.export-markdown .markdown { font-size: 15px; }
+.export-source { margin-top: 6px; }
+.export-source summary { cursor: pointer; color: var(--text-faint); font-size: 12px; user-select: none; }
+.export-code { margin: 6px 0 0; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font: 13px/1.5 var(--font-mono); overflow-x: auto; white-space: pre; }
+.export-footer { max-width: 960px; margin: 32px auto 24px; padding: 0 16px; color: var(--text-faint); font-size: 12px; }
+.tok-keyword { color: var(--syntax-keyword); }
+.tok-string { color: var(--syntax-string); }
+.tok-number { color: var(--syntax-number); }
+.tok-comment { color: var(--syntax-comment); font-style: italic; }
+.tok-type { color: var(--syntax-type); }
+.tok-def { color: var(--syntax-def); }
+.tok-meta { color: var(--syntax-meta); }

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && vite build -c vite.export.config.ts && vite build -c vite.export-charts.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -20,7 +20,10 @@
     "@lezer/highlight": "1.2.5",
     "markdown-it": "15.0.3",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "vega": "6.4.0",
+    "vega-embed": "7.3.0",
+    "vega-lite": "6.5.0"
   },
   "devDependencies": {
     "@types/markdown-it": "14.2.0",

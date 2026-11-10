@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { Root } from "./Root";
 import { NotebookStore } from "./store";
+import "./theme"; // applies the stored light/dark choice before anything renders
 import "./styles.css";
 
 // The token arrives in the URL printed by `reverb edit`. Keep it for reloads of this tab, but take

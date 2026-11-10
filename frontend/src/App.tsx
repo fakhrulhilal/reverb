@@ -3,6 +3,7 @@ import { flushSync } from "react-dom";
 import { CellView, type Dependencies } from "./Cell";
 import type { EditorKeys } from "./CodeEditor";
 import { PackagesPanel } from "./Packages";
+import { ThemeButton } from "./ThemeButton";
 import type { NotebookStore } from "./store";
 
 const isMac = navigator.platform.toUpperCase().includes("MAC");
@@ -213,6 +214,7 @@ export function App({ store }: { store: NotebookStore }) {
         <button onClick={() => store.restart()} title="Stop the kernel and start a new one. Values are lost; outputs stay until cells run again.">
           Restart
         </button>
+        <ThemeButton />
       </header>
 
       {state.connection !== "open" && state.loaded && (

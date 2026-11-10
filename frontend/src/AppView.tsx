@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { MarkdownView, Outputs } from "./Outputs";
 import type { NotebookStore } from "./store";
+import { ThemeButton } from "./ThemeButton";
 
 /**
  * A notebook served with `reverb run`: Markdown and outputs, widgets live, no code and no editing.
@@ -23,6 +24,7 @@ export function AppView({ store }: { store: NotebookStore }) {
           {state.kernel.message}
         </div>
       )}
+      <ThemeButton className="app-theme" />
       <main className="cells app-cells">
         {!state.loaded && <div className="loading">Loading…</div>}
         {state.cells.map((cell) => {

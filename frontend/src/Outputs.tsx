@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { MIME, type Output, type WidgetSpec } from "./protocol";
+import { ChartView } from "./ChartView";
 import { WidgetView } from "./Widgets";
 import { renderMarkdown } from "./markdown";
 
@@ -63,6 +64,7 @@ function Rich({ data }: { data: Record<string, string> }) {
     const e = parse<ErrorData>(data[MIME.error]);
     if (e) return <ErrorView error={e} />;
   }
+  if (data[MIME.vegaLite]) return <ChartView spec={data[MIME.vegaLite]} />;
   if (data[MIME.table]) {
     const t = parse<TableData>(data[MIME.table]);
     if (t) return <TableView table={t} />;
