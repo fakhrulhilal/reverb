@@ -116,12 +116,33 @@ public static class TextFormatter
         return sb.ToString().TrimEnd('\n');
     }
 
+    /// <summary>Items shown in a table cell that holds a sequence, before "…".</summary>
+    const int MaxCellItems = 10;
+
     static string Cell(object? value, int depth, HashSet<object> seen)
     {
-        var text = value is null || IsScalar(value.GetType()) || value is string
-            ? Format(value, depth + 1, seen)
-            : value.ToString() ?? "";
+        var text = value switch
+        {
+            null or string => Format(value, depth + 1, seen),
+            _ when IsScalar(value.GetType()) => Format(value, depth + 1, seen),
+            // A list in a cell reads "a, b, c" rather than System.String[].
+            IEnumerable items and not IDictionary => ItemList(items, depth, seen),
+            _ => value.ToString() ?? "",
+        };
         return text.Replace('\n', ' ').Replace('\r', ' ');
+    }
+
+    static string ItemList(IEnumerable items, int depth, HashSet<object> seen)
+    {
+        var shown = new List<string>();
+        var count = 0;
+        foreach (var item in items)
+        {
+            if (++count <= MaxCellItems)
+                shown.Add(item is null || item is string || IsScalar(item.GetType()) ? Format(item, depth + 1, seen) : item.ToString() ?? "");
+        }
+        if (count == 0) return "(empty)";
+        return count > MaxCellItems ? $"{string.Join(", ", shown)}, … ({count} in all)" : string.Join(", ", shown);
     }
 
     static List<MemberInfo> Members(Type type) =>
