@@ -21,7 +21,10 @@ static class Program
                                              widgets only, code hidden.
               --port <n>, --no-browser       As for edit.
               --host <address>               Listen on this address (default 127.0.0.1).
-          export, convert                    Not available yet.
+          export <file.cs> --html            Run a notebook and write a self-contained HTML page
+                                             of its outputs (-o out.html, --no-code).
+          convert <file.ipynb | file.dib>    Convert a Jupyter or Polyglot notebook to a Reverb
+                                             notebook (-o out.cs, --force to overwrite).
 
         Options:
           --version                          Print the version.
@@ -58,9 +61,10 @@ static class Program
                 return await EditCommand.RunNewAsync(args[1..]);
             case "run":
                 return await EditCommand.RunAppAsync(args[1..]);
-            case "export" or "convert":
-                Console.Error.WriteLine($"'reverb {args[0]}' isn't available in this version yet. For now you can use 'reverb edit', 'reverb run', 'reverb exec', 'reverb check', or 'dotnet run <file.cs>'.");
-                return 2;
+            case "export":
+                return await ExportCommand.RunAsync(args[1..]);
+            case "convert":
+                return ConvertCommand.Run(args[1..]);
             default:
                 Console.Error.WriteLine($"Unknown command '{args[0]}'.\n");
                 Console.Error.WriteLine(Usage);

@@ -194,6 +194,21 @@ public sealed class EditorServer : IAsyncDisposable
 }
 
 /// <summary>The built frontend, embedded in this assembly under <c>wwwroot/</c>.</summary>
+/// <summary>Files from the built frontend, for other parts of Reverb (<c>reverb export</c> uses the export page's script).</summary>
+public static class EmbeddedFrontend
+{
+    /// <summary>The text of a built frontend file, e.g. "export/export.js", or null if it isn't there.</summary>
+    public static string? ReadText(string path)
+    {
+        var assembly = typeof(EmbeddedFrontend).Assembly;
+        var name = assembly.GetManifestResourceNames()
+            .FirstOrDefault(n => n.Replace('\\', '/').Equals("wwwroot/" + path, StringComparison.Ordinal));
+        if (name is null) return null;
+        using var reader = new StreamReader(assembly.GetManifestResourceStream(name)!);
+        return reader.ReadToEnd();
+    }
+}
+
 sealed class FrontendAssets
 {
     readonly Assembly assembly = typeof(FrontendAssets).Assembly;

@@ -15,7 +15,7 @@
     <FrontendDist>$(FrontendDir)dist/</FrontendDist>
   </PropertyGroup>
   <ItemGroup>
-    <FrontendSource Include="$(FrontendDir)src/**/*;$(FrontendDir)index.html;$(FrontendDir)package.json;$(FrontendDir)package-lock.json;$(FrontendDir)vite.config.ts;$(FrontendDir)tsconfig.json" />
+    <FrontendSource Include="$(FrontendDir)src/**/*;$(FrontendDir)index.html;$(FrontendDir)package.json;$(FrontendDir)package-lock.json;$(FrontendDir)vite.config.ts;$(FrontendDir)vite.export.config.ts;$(FrontendDir)vite.export-charts.config.ts;$(FrontendDir)tsconfig.json" />
   </ItemGroup>
 
   <Target Name="BuildFrontend" BeforeTargets="BeforeBuild" Condition="'$(SkipFrontendBuild)' != 'true'" Inputs="@(FrontendSource)" Outputs="$(FrontendDist)index.html">
