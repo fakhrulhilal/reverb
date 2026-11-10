@@ -74,6 +74,46 @@ public sealed record NotebookDocument
     }
 
     /// <summary>
+    /// Sets the notebook's NuGet packages, apart from Reverb.Runtime, which is left alone. A package
+    /// that stays keeps its line (with the new version); removed packages lose theirs; new ones go
+    /// after the last <c>#:package</c> line.
+    /// </summary>
+    public NotebookDocument WithPackages(IEnumerable<NotebookPackage> packages)
+    {
+        var wanted = packages
+            .Where(p => !p.Name.Equals(NotebookUpgrader.RuntimePackage, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (wanted.Select(p => p.Problem()).FirstOrDefault(p => p is not null) is { } problem) throw new ArgumentException(problem);
+
+        var byName = wanted.GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.Last(), StringComparer.OrdinalIgnoreCase);
+        var lines = new List<PreambleLine>();
+        var lastPackage = -1;
+        foreach (var line in Preamble.Lines)
+        {
+            if (Directive.TryParse(line.Text, out var d) && d.Kind == "package" && !d.Name.Equals(NotebookUpgrader.RuntimePackage, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!byName.Remove(d.Name, out var keep)) continue;
+                // Unchanged lines are kept as written (spacing and all).
+                var same = d.Name.Equals(keep.Name, StringComparison.Ordinal) && d.Value == keep.Version;
+                lines.Add(same ? line : line with { Text = new Directive("package", keep.Name, keep.Version).ToString() });
+                lastPackage = lines.Count - 1;
+                continue;
+            }
+            if (Directive.TryParse(line.Text, out var other) && other.Kind == "package") lastPackage = lines.Count;
+            lines.Add(line);
+        }
+
+        var added = wanted.Where(p => byName.ContainsKey(p.Name)).DistinctBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(p => new PreambleLine(new Directive("package", p.Name, p.Version).ToString(), Newline)).ToList();
+        if (added.Count > 0)
+        {
+            var at = lastPackage >= 0 ? lastPackage + 1 : lines.FindLastIndex(l => Preamble.IsDirective(l) || l.Text.StartsWith("#!", StringComparison.Ordinal)) + 1;
+            lines.InsertRange(at, added);
+        }
+        return lines.SequenceEqual(Preamble.Lines) ? this : this with { Preamble = new Preamble([.. lines]) };
+    }
+
+    /// <summary>
     /// Turns a flag on the <c>// reverb-notebook v1</c> header line on or off (for example <c>lazy</c>).
     /// Adds the header if the file doesn't have one.
     /// </summary>

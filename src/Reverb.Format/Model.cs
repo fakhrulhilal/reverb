@@ -118,6 +118,24 @@ public sealed record Directive(string Kind, string Name, string? Value)
         : $"#:{Kind} {Name}{(Kind == "property" ? '=' : '@')}{Value}";
 }
 
+/// <summary>A <c>#:package</c> line: a NuGet package and the version the notebook asks for.</summary>
+public sealed record NotebookPackage(string Name, string Version)
+{
+    public override string ToString() => $"{Name}@{Version}";
+
+    /// <summary>Why this can't be written as a <c>#:package</c> line, or null if it can.</summary>
+    public string? Problem()
+    {
+        if (Name.Length == 0 || !Name.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-'))
+            return $"'{Name}' isn't a valid package name. NuGet package names use letters, digits, '.', '_' and '-'.";
+        if (Version.Length == 0)
+            return $"Package '{Name}' needs a version, e.g. 1.2.3 ('*' takes the latest).";
+        if (!Version.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '+' or '*' or '[' or ']' or '(' or ')' or ','))
+            return $"'{Version}' isn't a valid version for package '{Name}'.";
+        return null;
+    }
+}
+
 /// <summary>The <c>// reverb-notebook v1</c> line, with any flags after the version.</summary>
 public sealed record NotebookHeader(int Version, ImmutableArray<string> Flags)
 {
