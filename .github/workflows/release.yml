@@ -14,7 +14,8 @@ on:
         default: 0.0.0-dev
 
 permissions:
-  contents: write
+  contents: write  # create the GitHub release
+  id-token: write  # trusted publishing: lets NuGet/login trade a GitHub token for a short-lived NuGet key
 
 jobs:
   release:
@@ -67,15 +68,20 @@ jobs:
           name: packages-${{ steps.version.outputs.version }}
           path: packages
 
+      # No stored API key: nuget.org's trusted publishing policy for this repo and workflow file
+      # hands out a key that works for an hour. NUGET_USER is the nuget.org username, not the email.
+      - name: Log in to nuget.org
+        if: github.event_name == 'push'
+        id: nuget
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       - name: Publish to nuget.org
         if: github.event_name == 'push'
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget.outputs.NUGET_API_KEY }}
         run: |
-          if [ -z "$NUGET_API_KEY" ]; then
-            echo "::error::The NUGET_API_KEY secret isn't set. Add it under Settings > Secrets and variables > Actions."
-            exit 1
-          fi
           # The runtime goes first: a tool that writes '#:package Reverb.Runtime@x' must never be
           # live before x is. The .snupkg symbol packages are pushed along with each .nupkg.
           for id in Reverb.Runtime Reverb.Notebooks; do
