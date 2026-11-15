@@ -9,9 +9,12 @@
     <Description>Reactive C# notebooks that are plain .cs files.</Description>
     <InvariantGlobalization>false</InvariantGlobalization>
     <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <!-- nuget.org renders plain Markdown only: no HTML, and images from a short list of hosts. -->
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Reverb.Server\Reverb.Server.csproj" />

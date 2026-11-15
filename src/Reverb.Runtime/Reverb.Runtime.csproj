@@ -7,8 +7,11 @@
     <Description>Display helpers and UI widgets for Reverb notebooks.</Description>
     <IsAotCompatible>false</IsAotCompatible>
     <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <!-- nuget.org renders plain Markdown only: no HTML, and images from a short list of hosts. -->
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>
