@@ -93,6 +93,11 @@ public class CliTests(ITestOutputHelper output)
     {
         var (dir, version) = await Cli.NotebookFolderAsync();
         var file = Path.Combine(dir, "switches.cs");
+        // The switches were taken from SDK 10, the band Reverb runs on. A machine with a newer SDK
+        // would otherwise use it here (SDK 11 turns on MetadataUpdater and startup hooks).
+        await File.WriteAllTextAsync(Path.Combine(dir, "global.json"), $$"""
+            { "sdk": { "version": "{{Environment.Version.Major}}.{{Environment.Version.Minor}}.100", "rollForward": "latestFeature" } }
+            """);
         // Every switch Reverb copies, as the running program sees it. If an SDK changes one, this fails.
         var probes = FileBasedAppRuntime.AotSwitches.Keys
             .Select((name, i) => $"Console.WriteLine(\"{name}=\" + (AppContext.TryGetSwitch(\"{name}\", out var s{i}) ? s{i}.ToString() : \"unset\"));");
