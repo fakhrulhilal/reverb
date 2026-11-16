@@ -9,6 +9,9 @@ test("completions list a variable from an earlier cell; hover and signature help
   await page.keyboard.type("var n = ord");
   const popup = page.locator(".cm-tooltip-autocomplete");
   await expect(popup.getByRole("option", { name: /^orders/ })).toBeVisible({ timeout: 15_000 });
+  // CodeMirror ignores Enter for 75 ms after the list opens (interactionDelay), so a fast Enter
+  // would start a new line instead of accepting.
+  await page.waitForTimeout(150);
   await page.keyboard.press("Enter");
   const second = codeCells(page).last();
   await expect(editorOf(second)).toHaveText("var n = orders");
