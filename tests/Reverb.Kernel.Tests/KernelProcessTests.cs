@@ -187,6 +187,22 @@ public class KernelProcessTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task A_cell_printing_while_diagnostics_are_sent_does_not_deadlock()
+    {
+        // On Unix the console stream locks Console.Out on every write. The protocol writer must not,
+        // or a cell holding Console.Out and the analyzer holding the protocol lock wait on each other.
+        var text = NotebookText.Build(["var watch = System.Diagnostics.Stopwatch.StartNew();\nwhile (watch.ElapsedMilliseconds < 4000) Console.WriteLine(watch.ElapsedMilliseconds);\nConsole.WriteLine(\"end\");"]);
+        var (client, rec) = await StartAsync(text);
+        await using var _ = client;
+        var open = client.SendAsync(Open(text));
+        await WaitFor(() => rec.StatusOf("c1") == "running");
+        for (var v = 0; v < 40 && !open.IsCompleted; v++)
+            await client.SendAsync(new KernelRequest { Type = RequestTypes.Analyze, Text = NotebookText.Build([$"var x = missing{v};"]), Version = v }).WaitAsync(TimeSpan.FromSeconds(20));
+        await open.WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.EndsWith("end\n", rec.Stdout("c1"));
+    }
+
+    [Fact]
     public async Task Kernels_starting_at_the_same_time_share_their_config_safely()
     {
         // The notebook path is part of the config, so a new one means a file nobody has written yet: all eight race to write it.

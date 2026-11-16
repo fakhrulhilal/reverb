@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.Win32.SafeHandles;
 
 namespace Reverb.Kernel;
 
@@ -18,8 +19,17 @@ public static class KernelProcess
     {
         KernelTrace.Enable();
         KernelTrace.Mark("main");
-        return KernelServer.RunAsync(new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false)), Console.OpenStandardOutput());
+        return KernelServer.RunAsync(new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false)), ProtocolOutput());
     }
+
+    /// <summary>
+    /// The process's stdout, for protocol messages. On Unix the console stream locks Console.Out on
+    /// every write, and Console.Out is the cells' writer: a cell printing while another thread sends
+    /// an event would deadlock. A plain file stream on descriptor 1 takes no such lock.
+    /// </summary>
+    static Stream ProtocolOutput() => OperatingSystem.IsWindows()
+        ? Console.OpenStandardOutput()
+        : new FileStream(new SafeFileHandle(1, ownsHandle: false), FileAccess.Write, bufferSize: 0);
 
     /// <summary>The package assemblies this kernel was built with. Empty for the plain kernel.</summary>
     public static IReadOnlyList<string> PackageReferences()
