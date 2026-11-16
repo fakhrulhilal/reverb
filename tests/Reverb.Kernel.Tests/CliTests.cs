@@ -107,7 +107,8 @@ public class CliTests(ITestOutputHelper output)
             "Console.WriteLine(Path.GetFileName((string?)AppContext.GetData(\"EntryPointFilePath\")));",
             string.Join("\n", probes),
         ]).Replace("Reverb.Runtime@0.1.0", $"Reverb.Runtime@{version}"));
-        Assert.Equal(0, (await Cli.Dotnet(dir, "build", file)).ExitCode);
+        var built = await Cli.Dotnet(dir, "build", file);
+        Assert.True(built.ExitCode == 0, built.Stdout + built.Stderr);
         var reference = await Cli.Dotnet(dir, "run", "--no-build", file);
         var exec = await Cli.Reverb(dir, "exec", file);
         output.WriteLine(reference.Stdout);

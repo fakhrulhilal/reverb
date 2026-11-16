@@ -34,6 +34,10 @@ static class Cli
             StandardErrorEncoding = Encoding.UTF8,
         };
         foreach (var a in args) info.ArgumentList.Add(a);
+        // `dotnet test` passes its own SDK's MSBuild paths down to the tests. A child `dotnet` must
+        // find its SDK itself, or one pinned by global.json loads the wrong SDK's targets.
+        foreach (var name in new[] { "MSBuildExtensionsPath", "MSBuildSDKsPath", "MSBUILD_EXE_PATH", "MSBuildLoadMicrosoftTargetsReadOnly" })
+            info.Environment.Remove(name);
         info.Environment["DOTNET_NOLOGO"] = "1";
         info.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         // Package kernels the CLI builds go under artifacts/, not the user's ~/.reverb.
