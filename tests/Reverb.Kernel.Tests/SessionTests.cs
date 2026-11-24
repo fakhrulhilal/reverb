@@ -438,3 +438,32 @@ public class SessionTests(ITestOutputHelper output)
         }
     }
 }
+
+public class SourceGeneratorSessionTests
+{
+    const string Setup = "using Reverb;\nusing System.Text.Json;\nusing System.Text.Json.Serialization;\nusing System.Text.RegularExpressions;";
+
+    const string Types = """
+        record Order(int Id);
+
+        [JsonSerializable(typeof(Order))]
+        partial class AppJson : JsonSerializerContext;
+
+        static partial class Patterns
+        {
+            [GeneratedRegex(@"\d+")]
+            public static partial Regex Digits();
+        }
+        """;
+
+    [Fact]
+    public async Task Cells_use_what_the_generators_added_to_the_types_cell()
+    {
+        await using var s = new KernelSession();
+        await s.OpenAsync(NotebookDocument.Parse(NotebookText.Build(
+            ["var json = JsonSerializer.Serialize(new Order(1), AppJson.Default.Order);", "var masked = Patterns.Digits().Replace(\"a1b22\", \"#\");"],
+            Types, Setup)));
+        Assert.Equal("{\"Id\":1}", s.Store.Get<string>("json"));
+        Assert.Equal("a#b#", s.Store.Get<string>("masked"));
+    }
+}
